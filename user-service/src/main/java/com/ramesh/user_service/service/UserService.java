@@ -1,22 +1,10 @@
 package com.ramesh.user_service.service;
 
-import com.ramesh.user_service.entity.User;
-import com.ramesh.user_service.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
+import com.ramesh.user_service.dto.request.UserRequestDTO;
+import com.ramesh.user_service.dto.response.UserResponseDTO;
 
-import java.util.List;
 
-@Service
-@RequiredArgsConstructor
-public class UserService {
-    private final UserRepository repo;
-
-    public User save(User user) {
-        return repo.save(user);
-    }
-
-    public List<User> getAll() {
-        return repo.findAll();
-    }
+public interface UserService {
+    UserResponseDTO createUser(UserRequestDTO request);
+    UserResponseDTO getUserById(String id);
 }

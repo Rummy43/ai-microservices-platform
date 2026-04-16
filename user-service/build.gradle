@@ -18,21 +18,38 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-h2console'
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	// Web & Core
+	implementation 'org.springframework.boot:spring-boot-starter-web' // Use starter-web for standard REST
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	compileOnly 'org.projectlombok:lombok'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// Documentation (Resolves the @Tag error)
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.0'
+
+	// Persistence
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	runtimeOnly 'com.h2database:h2'
+	// Note: For O1 profile, eventually switch to 'org.postgresql:postgresql' for AWS RDS compatibility
+
+	// Performance: MapStruct (Better than manual mapping or BeanUtils)
+	implementation 'org.mapstruct:mapstruct:1.6.0'
+	annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.0'
+
+	// Productivity: Lombok
+	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testCompileOnly 'org.projectlombok:lombok'
+	// Required for Lombok to work with MapStruct
+	annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+
+	// Testing
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+// Optimization for Java 21 Virtual Threads
+tasks.withType(JavaCompile) {
+	options.compilerArgs << "-parameters"
+	options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
 }
 
 tasks.named('test') {
