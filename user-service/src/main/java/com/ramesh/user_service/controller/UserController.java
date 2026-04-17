@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -27,7 +29,9 @@ public class UserController {
     @PostMapping
     @Operation(summary = "Create a new user", description = "Stores a user in the database and returns the created record with a unique UUID.")
     public ResponseEntity<UserResponseDTO> createUser(@Valid @RequestBody UserRequestDTO request) {
-        return new ResponseEntity<>(userService.createUser(request), HttpStatus.CREATED);
+        UserResponseDTO response = userService.createUser(request);
+        URI location = URI.create("/api/v1/users/" + response.id());
+        return ResponseEntity.created(location).body(response);
     }
 
     /**

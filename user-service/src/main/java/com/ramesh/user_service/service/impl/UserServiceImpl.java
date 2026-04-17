@@ -3,7 +3,7 @@ package com.ramesh.user_service.service.impl;
 import com.ramesh.user_service.dto.request.UserRequestDTO;
 import com.ramesh.user_service.dto.response.UserResponseDTO;
 import com.ramesh.user_service.entity.User;
-import com.ramesh.user_service.exception.ResourceConflictException;
+import com.ramesh.user_service.event.EventPublisher;import com.ramesh.user_service.exception.ResourceConflictException;
 import com.ramesh.user_service.exception.ResourceNotFoundException;
 import com.ramesh.user_service.mapper.UserMapper;
 import com.ramesh.user_service.repository.UserRepository;
@@ -20,6 +20,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final EventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -35,7 +36,7 @@ public class UserServiceImpl implements UserService {
 
         User savedUser = userRepository.save(user);
         log.info("User created successfully with ID: {}", savedUser.getId());
-
+        eventPublisher.publishUserCreatedEvent(user);
         return userMapper.toResponse(savedUser);
     }
 
