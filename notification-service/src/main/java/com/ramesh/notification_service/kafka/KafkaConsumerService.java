@@ -11,7 +11,6 @@ public class KafkaConsumerService {
 
     @KafkaListener(topics = "user-created-topic", groupId = "notification-group")
     public void consume(UserCreatedEvent event) {
-        log.info(event.getEmail());
-        log.info("Received event: {}", event);
+        log.info("Received: {}", event);
     }
 }

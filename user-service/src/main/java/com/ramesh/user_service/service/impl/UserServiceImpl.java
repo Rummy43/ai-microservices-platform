@@ -1,9 +1,9 @@
 package com.ramesh.user_service.service.impl;
 
+import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.user_service.dto.request.UserRequestDTO;
 import com.ramesh.user_service.dto.response.UserResponseDTO;
 import com.ramesh.user_service.entity.User;
-import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.user_service.exception.ResourceConflictException;
 import com.ramesh.user_service.exception.ResourceNotFoundException;
 import com.ramesh.user_service.kafka.EventPublisher;
