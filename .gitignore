@@ -1,0 +1,35 @@
+# --- IDE Settings ---
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.gradle/
+.settings/
+.project
+.classpath
+.factorypath
+
+# --- Build Outputs ---
+**/build/
+**/target/
+**/out/
+bin/
+
+# --- Artifacts ---
+**/*.jar
+**/*.war
+**/*.zip
+**/*.tar.gz
+
+# --- Log files & Dumps ---
+*.log
+*.hprof
+
+# --- OS generated files ---
+.DS_Store
+Thumbs.db
+
+# --- Microservice Specifics ---
+# If you have local env files with secrets
+.env

@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: notification-service
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-group
+      auto-offset-reset: earliest
+      # Key is String, Value is Avro
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
+      properties:
+        # Port 8085 to match Docker mapping
+        schema.registry.url: http://localhost:8085
+        # This tells Avro to look for the generated Java class in your project
+        specific.avro.reader: true
+    listener:
+      type: single
+      missing-topics-fatal: false
+  devtools:
+    restart:
+      enabled: false
+
+server:
+  port: 8081
