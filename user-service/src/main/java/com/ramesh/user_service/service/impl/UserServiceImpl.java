@@ -39,7 +39,7 @@ public class UserServiceImpl implements UserService {
         User savedUser = userRepository.save(user);
         log.info("User created successfully with ID: {}", savedUser.getId());
         UserCreatedEvent event = UserCreatedEvent.newBuilder()
-                .setId(savedUser.getId().toString())
+                .setId(savedUser.getId())
                 .setEmail(savedUser.getEmail())
                 .setFirstName(savedUser.getFirstName())
                 .setLastName(savedUser.getLastName())
