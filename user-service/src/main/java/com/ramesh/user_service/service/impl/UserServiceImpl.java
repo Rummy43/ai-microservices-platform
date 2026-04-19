@@ -3,8 +3,10 @@ package com.ramesh.user_service.service.impl;
 import com.ramesh.user_service.dto.request.UserRequestDTO;
 import com.ramesh.user_service.dto.response.UserResponseDTO;
 import com.ramesh.user_service.entity.User;
-import com.ramesh.user_service.event.EventPublisher;import com.ramesh.user_service.exception.ResourceConflictException;
+import com.ramesh.events.UserCreatedEvent;
+import com.ramesh.user_service.exception.ResourceConflictException;
 import com.ramesh.user_service.exception.ResourceNotFoundException;
+import com.ramesh.user_service.kafka.EventPublisher;
 import com.ramesh.user_service.mapper.UserMapper;
 import com.ramesh.user_service.repository.UserRepository;
 import com.ramesh.user_service.service.UserService;
@@ -36,7 +38,13 @@ public class UserServiceImpl implements UserService {
 
         User savedUser = userRepository.save(user);
         log.info("User created successfully with ID: {}", savedUser.getId());
-        eventPublisher.publishUserCreatedEvent(user);
+        UserCreatedEvent event = UserCreatedEvent.newBuilder()
+                .setId(savedUser.getId().toString())
+                .setEmail(savedUser.getEmail())
+                .setFirstName(savedUser.getFirstName())
+                .setLastName(savedUser.getLastName())
+                .build();
+        eventPublisher.publishUserCreatedEvent(event);
         return userMapper.toResponse(savedUser);
     }
 

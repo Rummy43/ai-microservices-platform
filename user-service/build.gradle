@@ -1,57 +1,73 @@
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '4.0.5'
-	id 'io.spring.dependency-management' version '1.1.7'
+    id 'java'
+    id 'org.springframework.boot' version '4.0.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.github.davidmc24.gradle.plugin.avro' version '1.9.1'
 }
 
 group = 'com.ramesh'
 version = '0.0.1-SNAPSHOT'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 repositories {
-	mavenCentral()
+    mavenCentral()
+    maven {
+        url = uri("https://packages.confluent.io/maven/")
+    }
 }
 
 dependencies {
-	// Web & Core
-	implementation 'org.springframework.boot:spring-boot-starter-web' // Use starter-web for standard REST
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // Web & Core
+    implementation 'org.springframework.boot:spring-boot-starter-web' // Use starter-web for standard REST
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
-	// Documentation (Resolves the @Tag error)
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.0'
+    // Documentation (Resolves the @Tag error)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.0'
 
-	// Persistence
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	runtimeOnly 'com.h2database:h2'
-	// Note: For O1 profile, eventually switch to 'org.postgresql:postgresql' for AWS RDS compatibility
+    implementation 'org.springframework.boot:spring-boot-starter-kafka'
 
-	// Performance: MapStruct (Better than manual mapping or BeanUtils)
-	implementation 'org.mapstruct:mapstruct:1.6.0'
-	annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.0'
+    implementation 'org.apache.avro:avro:1.12.1'
+    implementation 'io.confluent:kafka-avro-serializer:7.6.0'
 
-	// Productivity: Lombok
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
-	// Required for Lombok to work with MapStruct
-	annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+    // Persistence
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.h2database:h2'
+    // Note: For O1 profile, eventually switch to 'org.postgresql:postgresql' for AWS RDS compatibility
 
-	// Testing
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // Performance: MapStruct (Better than manual mapping or BeanUtils)
+    implementation 'org.mapstruct:mapstruct:1.6.0'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.0'
+
+    // Productivity: Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    // Required for Lombok to work with MapStruct
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 // Optimization for Java 21 Virtual Threads
 tasks.withType(JavaCompile) {
-	options.compilerArgs << "-parameters"
-	options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+    options.compilerArgs << "-parameters"
+    options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+    useJUnitPlatform()
 }
+
+generateAvroJava {
+    source("src/main/resources/avro")
+    outputDir = file("build/generated-main-avro-java")
+}
+
+sourceSets.main.java.srcDirs += [file("build/generated-main-avro-java")]
