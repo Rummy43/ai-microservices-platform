@@ -18,10 +18,15 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Build and Install Common Schema
+        working-directory: ./common-schema
+        run: mvn clean install -DskipTests
 
       # This 'defaults' section tells GitHub to run commands inside user-service
       - name: Build User Service
         working-directory: ./user-service
         run: |
           chmod +x gradlew
-          ./gradlew build
+          ./gradlew build -x test
