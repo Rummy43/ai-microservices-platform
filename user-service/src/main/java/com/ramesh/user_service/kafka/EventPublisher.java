@@ -14,19 +14,26 @@ public class EventPublisher {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public void publishUserCreatedEvent(UserCreatedEvent event) {
-        log.info(">>> Publishing event for email: {}", event.getEmail()); // add this
-
-        kafkaTemplate.send("user-created-topic", event)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.error(">>> FAILED to publish event for email: {} | error: {}",
-                                event.getEmail(), ex.getMessage(), ex);
-                    } else {
-                        log.info(">>> PUBLISHED event for email: {} | partition: {} | offset: {}",
-                                event.getEmail(),
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
-                    }
-                });
+        log.info("Publishing UserCreatedEvent | userId: {} | email: {}",
+                event.getId(), event.getEmail());
+        try {
+            kafkaTemplate.send("user-created-topic", event.getId().toString(), event)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("Failed to publish UserCreatedEvent | userId: {} | email: {} | error: {}",
+                                    event.getId(), event.getEmail(), ex.getMessage(), ex);
+                        } else {
+                            log.info("Successfully published UserCreatedEvent | userId: {} | email: {} | partition: {} | offset: {}",
+                                    event.getId(),
+                                    event.getEmail(),
+                                    result.getRecordMetadata().partition(),
+                                    result.getRecordMetadata().offset());
+                        }
+                    });
+        } catch (Exception ex) {
+            log.error("Exception while preparing UserCreatedEvent for userId: {} | error: {}",
+                    event.getId(), ex.getMessage(), ex);
+            throw ex;
+        }
     }
 }

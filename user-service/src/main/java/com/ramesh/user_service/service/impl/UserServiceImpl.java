@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Service
 @Slf4j
@@ -27,25 +29,33 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponseDTO createUser(UserRequestDTO dto) {
-        log.info("Attempting to create user with email: {}", dto.email());
+        log.info("Creating user | email: {}", dto.email());
 
         if (userRepository.existsByEmail(dto.email())) {
-            log.warn("User creation failed: Email {} already exists", dto.email());
+            log.warn("User creation rejected — email already exists | email: {}", dto.email());
             throw new ResourceConflictException("Email already registered");
         }
 
         User user = userMapper.toEntity(dto);
-
         User savedUser = userRepository.save(user);
-        log.info("User created successfully with ID: {}", savedUser.getId());
+        log.info("User persisted successfully | userId: {} | email: {}",
+                savedUser.getId(), savedUser.getEmail());
+
         UserCreatedEvent event = UserCreatedEvent.newBuilder()
                 .setId(savedUser.getId())
                 .setEmail(savedUser.getEmail())
                 .setFirstName(savedUser.getFirstName())
                 .setLastName(savedUser.getLastName())
                 .build();
-        eventPublisher.publishUserCreatedEvent(event);
+
+        publishAfterCommit(event);
+
         return userMapper.toResponse(savedUser);
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void publishAfterCommit(UserCreatedEvent event) {
+        eventPublisher.publishUserCreatedEvent(event);
     }
 
     @Override

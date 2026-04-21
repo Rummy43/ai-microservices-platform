@@ -20,6 +20,8 @@ spring:
       type: single
       missing-topics-fatal: false
       observation-enabled: false
+    admin:
+      auto-create: false
   devtools:
     restart:
       enabled: false
