@@ -129,6 +129,13 @@ Process / Log Notification
 - Prometheus
 - Grafana
 
+## 🛡 Failure Handling Strategy
+
+- Implemented retry using Spring Kafka `@RetryableTopic`
+- Configured Dead Letter Topic (DLT) for failed events
+- Added custom DLT handler for failure processing
+- Ensures system resilience and fault isolation
+
 ---
 
 ## 🚀 Running Locally
@@ -152,7 +159,8 @@ cd notification-service && ./gradlew bootRun
 - ✅ Event consumption (Notification Service)
 - ✅ Avro schema integration
 - ✅ Dockerized Kafka (KRaft mode)
-- 🚧 Retry & DLQ (in progress)
+- ✅ Retry mechanism using @RetryableTopic
+- ✅ Dead Letter Topic (DLT) handling with @DltHandler
 - 🚧 Idempotent consumer (in progress)
 - 🚧 Observability setup (planned)
 
