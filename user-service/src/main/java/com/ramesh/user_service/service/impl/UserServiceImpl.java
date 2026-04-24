@@ -12,10 +12,13 @@ import com.ramesh.user_service.repository.UserRepository;
 import com.ramesh.user_service.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -25,6 +28,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final EventPublisher eventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
     @Transactional
@@ -42,13 +46,14 @@ public class UserServiceImpl implements UserService {
                 savedUser.getId(), savedUser.getEmail());
 
         UserCreatedEvent event = UserCreatedEvent.newBuilder()
-                .setId(savedUser.getId())
+                .setEventId(UUID.randomUUID().toString())
+                .setId(savedUser.getId().toString())
                 .setEmail(savedUser.getEmail())
                 .setFirstName(savedUser.getFirstName())
                 .setLastName(savedUser.getLastName())
                 .build();
 
-        publishAfterCommit(event);
+        applicationEventPublisher.publishEvent(event);
 
         return userMapper.toResponse(savedUser);
     }
@@ -60,7 +65,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public UserResponseDTO getUserById(String id) {
+    public UserResponseDTO getUserById(UUID id) {
         return userRepository.findById(id)
                 .map(userMapper::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));

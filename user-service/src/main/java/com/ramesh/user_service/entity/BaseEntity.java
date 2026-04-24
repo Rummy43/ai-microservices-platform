@@ -1,10 +1,12 @@
 package com.ramesh.user_service.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.type.NumericBooleanConverter;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -38,6 +40,7 @@ public abstract class BaseEntity {
     @LastModifiedBy
     private String modifiedBy;
 
-    @Column(nullable = false, length = 1)
+    @Column(nullable = false)
+    @Convert(converter = NumericBooleanConverter.class)
     private Boolean isActive = true;
 }

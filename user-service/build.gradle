@@ -37,7 +37,9 @@ dependencies {
 
     // Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    runtimeOnly 'com.h2database:h2'
+    implementation 'org.liquibase:liquibase-core'
+    implementation 'org.yaml:snakeyaml'
+    runtimeOnly 'com.mysql:mysql-connector-j'
     // Note: For O1 profile, eventually switch to 'org.postgresql:postgresql' for AWS RDS compatibility
 
     // Performance: MapStruct (Better than manual mapping or BeanUtils)

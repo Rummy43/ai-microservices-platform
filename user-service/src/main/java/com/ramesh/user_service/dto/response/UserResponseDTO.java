@@ -1,10 +1,12 @@
 package com.ramesh.user_service.dto.response;
 
+import java.util.UUID;
+
 /**
  * Response record providing a read-only view of the User.
  */
 public record UserResponseDTO(
-        String id,
+        UUID id,
         String firstName,
         String lastName,
         String email,
