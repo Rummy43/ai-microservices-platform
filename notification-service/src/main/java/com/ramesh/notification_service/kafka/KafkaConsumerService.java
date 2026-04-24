@@ -48,11 +48,14 @@ public class KafkaConsumerService {
                 attempt, topic, partition, offset, event.getEventId(), event.getEmail());
 
         try {
-            notificationService.sendWelcomeNotification(
-                    event, topic, partition, offset, attempt);
+            boolean processed = notificationService.sendWelcomeNotification(
+                    event, topic, partition, offset, attempt
+            );
 
-            log.info("Successfully processed UserCreatedEvent | eventId: {} | email: {} | attempt: {}",
-                    event.getEventId(), event.getEmail(), attempt);
+            if (processed) {
+                log.info("Successfully processed UserCreatedEvent | eventId: {} | email: {} | attempt: {}",
+                        event.getEventId(), event.getEmail(), attempt);
+            }
 
         }  catch (DataIntegrityViolationException ex) {
             // ✅ Race condition: two threads passed idempotency check simultaneously

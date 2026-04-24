@@ -13,6 +13,7 @@ To design and implement a **real-world microservices ecosystem** that:
 
 - Eliminates tight coupling between services
 - Handles failures gracefully using retry & DLQ patterns
+- Ensures data correctness under retries and duplicate events
 - Processes events asynchronously at scale
 - Demonstrates production-ready architecture patterns
 - Can be deployed to AWS using containerized infrastructure
@@ -24,17 +25,19 @@ To design and implement a **real-world microservices ecosystem** that:
 A simplified distributed workflow:
 
 1. **User Service**
-    - Creates users
-    - Publishes `UserCreatedEvent` to Kafka
+   - Creates users
+   - Persists data in MySQL
+   - Publishes `UserCreatedEvent` to Kafka
 
 2. **Notification Service**
-    - Consumes events from Kafka
-    - Sends notifications (simulated/logged)
+   - Consumes events from Kafka
+   - Applies idempotency checks
+   - Sends notifications (currently simulated/logged)
 
 3. **Future Extensions**
-    - Payment Service
-    - Analytics Service
-    - AI Processing Service
+   - Payment Service
+   - Analytics Service
+   - AI Processing Service
 
 ---
 
@@ -44,6 +47,7 @@ A simplified distributed workflow:
 - Schema-based messaging using Avro + Schema Registry
 - Independent deployable microservices
 - Centralized contract management via `common-schema`
+- Heterogeneous persistence strategy (MySQL + PostgreSQL)
 - Containerized using Docker
 
 > See architecture diagram below 👇
@@ -62,6 +66,11 @@ Services communicate via events instead of direct REST calls.
 - Dead Letter Topics (DLT)
 - Fault isolation between services
 
+### 🔹 Data Integrity & Idempotency
+- Ensures correctness under retries and duplicate message delivery
+- Implements idempotent consumer pattern
+- Prevents duplicate side effects (e.g., multiple notifications)
+
 ### 🔹 Scalability
 Kafka enables horizontal scaling of consumers and producers.
 
@@ -75,8 +84,8 @@ Avro + Schema Registry ensures backward/forward compatibility.
 ```
 ai-microservices-platform/
 │
-├── user-service/              # Publishes user events
-├── notification-service/     # Consumes and processes events
+├── user-service/              # Publishes user events (MySQL)
+├── notification-service/     # Consumes and processes events (PostgreSQL)
 ├── common-schema/            # Shared Avro schemas (event contracts)
 ├── docker/                   # Kafka + Schema Registry setup
 ├── docs/                     # Architecture diagrams
@@ -89,13 +98,13 @@ ai-microservices-platform/
 ```
 User API Request
       ↓
-User Service
+User Service (MySQL)
       ↓ (Publish Event)
 Kafka Topic
       ↓ (Consume Event)
-Notification Service
+Notification Service (PostgreSQL)
       ↓
-Process / Log Notification
+Idempotency Check → Process → Log Notification
 ```
 
 ---
@@ -104,7 +113,7 @@ Process / Log Notification
 
 ### Backend
 - Java 21
-- Spring Boot 3.4+
+- Spring Boot 4+
 - Spring Kafka
 - MapStruct
 - Lombok
@@ -115,8 +124,10 @@ Process / Log Notification
 - Avro
 
 ### Data
-- PostgreSQL (Production)
-- H2 (Development)
+- MySQL (User Service)
+- PostgreSQL (Notification Service)
+- Flyway (Notification Service migrations)
+- Liquibase (User Service migrations)
 
 ### DevOps & Infrastructure
 - Docker
@@ -129,6 +140,8 @@ Process / Log Notification
 - Prometheus
 - Grafana
 
+---
+
 ## 🛡 Failure Handling Strategy
 
 - Implemented retry using Spring Kafka `@RetryableTopic`
@@ -138,18 +151,24 @@ Process / Log Notification
 
 ---
 
+## 🧩 Idempotent Consumer Strategy
+
+- Implemented processed event tracking in Notification Service
+- Uses unique `eventId` to detect duplicate events
+- Stores processed events in PostgreSQL for persistence
+- Applies application-level and database-level safeguards
+- Prevents duplicate notifications under retry or re-delivery scenarios
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
-```bash
 docker-compose up -d
-```
 
 ### 2. Start Services
-```bash
-cd user-service && ./gradlew bootRun
+cd user-service && ./gradlew bootRun  
 cd notification-service && ./gradlew bootRun
-```
 
 ---
 
@@ -159,9 +178,9 @@ cd notification-service && ./gradlew bootRun
 - ✅ Event consumption (Notification Service)
 - ✅ Avro schema integration
 - ✅ Dockerized Kafka (KRaft mode)
-- ✅ Retry mechanism using @RetryableTopic
-- ✅ Dead Letter Topic (DLT) handling with @DltHandler
-- 🚧 Idempotent consumer (in progress)
+- ✅ Retry mechanism using `@RetryableTopic`
+- ✅ Dead Letter Topic (DLT) handling with `@DltHandler`
+- ✅ Idempotent consumer with processed event tracking
 - 🚧 Observability setup (planned)
 
 ---
@@ -170,7 +189,9 @@ cd notification-service && ./gradlew bootRun
 
 - Synchronous calls don’t scale in distributed systems
 - Event-driven architecture improves decoupling
+- Kafka provides at-least-once delivery — consumers must be idempotent
 - Failure handling is critical (Retry, DLQ, Idempotency)
+- Database constraints are essential for protecting against race conditions
 - Schema evolution is essential in microservices
 
 ---
@@ -180,6 +201,7 @@ cd notification-service && ./gradlew bootRun
 - Add API Gateway
 - Introduce authentication (JWT)
 - Deploy to AWS EKS
+- Replace mock notifications with real email provider (AWS SES / SendGrid)
 - Add centralized logging (ELK)
 - Add distributed tracing (OpenTelemetry)
 

@@ -21,7 +21,7 @@ public class NotificationService {
     private final NotificationLogRepository notificationLogRepository;
 
     @Transactional
-    public void sendWelcomeNotification(UserCreatedEvent event,
+    public boolean sendWelcomeNotification(UserCreatedEvent event,
                                         String topic,
                                         int partition,
                                         long offset,
@@ -34,7 +34,7 @@ public class NotificationService {
             log.warn("Duplicate event detected — skipping | eventId: {} | userId: {} | attempt: {}",
                     eventId, event.getId(), attempt);
             logNotification(event, attempt, "SKIPPED", null);
-            return;
+            return false;
         }
 
         try {
@@ -57,6 +57,7 @@ public class NotificationService {
 
             log.info("Welcome notification sent successfully | userId: {} | email: {}",
                     event.getId(), event.getEmail());
+            return true;
 
         } catch (Exception ex) {
             log.error("Failed to send welcome notification | userId: {} | email: {} | error: {}",
