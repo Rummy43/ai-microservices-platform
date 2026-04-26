@@ -55,6 +55,11 @@ A simplified distributed workflow:
 ![Architecture](./docs/architecture.png)
 
 ---
+## 📝 Articles
+
+- [Idempotency in Distributed Systems: From Concept to Kafka Implementation](https://medium.com/@yara.ramesh/idempotency-in-distributed-systems-from-concept-to-kafka-implementation-68d453a05733)
+
+---
 
 ## ⚙️ Key Architectural Principles
 
