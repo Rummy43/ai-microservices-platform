@@ -57,7 +57,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: notification-service
+    description: Consumes user-created events and applies idempotent notification processing
+    version: 1.0.0

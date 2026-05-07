@@ -142,8 +142,9 @@ Idempotency Check → Process → Log Notification
 
 ### Observability (Planned)
 - Spring Boot Actuator
-- Prometheus
-- Grafana
+- Micrometer
+- Prometheus metrics endpoint
+- Grafana (planned)
 
 ---
 
@@ -186,7 +187,9 @@ cd notification-service && ./gradlew bootRun
 - ✅ Retry mechanism using `@RetryableTopic`
 - ✅ Dead Letter Topic (DLT) handling with `@DltHandler`
 - ✅ Idempotent consumer with processed event tracking
-- 🚧 Observability setup (planned)
+- ✅ Spring Boot Actuator enabled
+- ✅ Prometheus metrics endpoint exposed
+- 🚧 Grafana dashboard setup (planned)
 
 ---
 
