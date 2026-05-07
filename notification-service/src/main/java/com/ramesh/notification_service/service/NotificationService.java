@@ -7,6 +7,7 @@ import com.ramesh.notification_service.repository.NotificationLogRepository;
 import com.ramesh.notification_service.repository.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,7 +44,8 @@ public class NotificationService {
             log.info("Sending welcome notification | userId: {} | email: {} | attempt: {}",
                     event.getId(), event.getEmail(), attempt);
 
-            // ✅ Mark as processed BEFORE logging success (atomic with @Transactional)
+            // ✅ Mark event as processed after successful notification logic.
+            // In a real email integration, this should happen only after the provider call succeeds.
             processedEventRepository.save(ProcessedEvent.builder()
                     .eventId(eventId)
                     .eventType("USER_CREATED")
@@ -59,11 +61,18 @@ public class NotificationService {
                     event.getId(), event.getEmail());
             return true;
 
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Duplicate event detected at DB level — skipping | eventId: {} | userId: {} | attempt: {}",
+                    eventId, event.getId(), attempt);
+
+            logNotification(event, attempt, "SKIPPED", "Duplicate event detected at DB constraint level");
+            return false;
+
         } catch (Exception ex) {
             log.error("Failed to send welcome notification | userId: {} | email: {} | error: {}",
                     event.getId(), event.getEmail(), ex.getMessage());
             logNotification(event, attempt, "FAILED", ex.getMessage());
-            throw ex; // rethrow to trigger Kafka retry
+            throw ex;
         }
     }
 
