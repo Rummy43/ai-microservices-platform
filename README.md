@@ -140,11 +140,15 @@ Idempotency Check → Process → Log Notification
 - Terraform (planned)
 - GitHub Actions (CI)
 
-### Observability (Planned)
+### Observability
 - Spring Boot Actuator
 - Micrometer
-- Prometheus metrics endpoint
-- Grafana (planned)
+- Prometheus
+- Grafana
+- JVM metrics monitoring
+- HTTP request rate monitoring
+- Kafka consumer throughput monitoring
+- CPU utilization tracking
 
 ---
 
@@ -167,14 +171,63 @@ Idempotency Check → Process → Log Notification
 
 ---
 
+## 📊 Observability Setup
+
+The platform includes a local observability stack for monitoring distributed event-driven workflows and Kafka-based asynchronous communication.
+
+### Observability Stack
+
+- Spring Boot Actuator
+- Micrometer
+- Prometheus
+- Grafana
+
+### Metrics Flow
+
+```text
+Spring Boot Services
+        ↓
+Actuator Prometheus Endpoints
+        ↓
+Prometheus Scraping
+        ↓
+Grafana Dashboards
+```
+
+### Dashboard Snapshot
+
+![Observability Dashboard](./docs/observability-dashboard.png)
+
+### Monitored Metrics
+
+- JVM Heap Memory Usage
+- HTTP Request Rate
+- CPU Utilization
+- Kafka Consumer Throughput
+
+### Available Endpoints
+
+```text
+http://localhost:8080/actuator/prometheus
+http://localhost:8081/actuator/prometheus
+http://localhost:9090
+http://localhost:3000
+```
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
+```bash
 docker-compose up -d
+```
 
 ### 2. Start Services
-cd user-service && ./gradlew bootRun  
+```bash
+cd user-service && ./gradlew bootRun
 cd notification-service && ./gradlew bootRun
+```
 
 ---
 
@@ -189,7 +242,7 @@ cd notification-service && ./gradlew bootRun
 - ✅ Idempotent consumer with processed event tracking
 - ✅ Spring Boot Actuator enabled
 - ✅ Prometheus metrics endpoint exposed
-- 🚧 Grafana dashboard setup (planned)
+- ✅ Grafana observability dashboard implemented
 
 ---
 
