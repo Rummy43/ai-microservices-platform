@@ -82,6 +82,9 @@ Kafka enables horizontal scaling of consumers and producers.
 ### 🔹 Schema Evolution
 Avro + Schema Registry ensures backward/forward compatibility.
 
+### 🔹 Traceability
+Correlation IDs are propagated across HTTP requests and Kafka events for end-to-end distributed request tracing.
+
 ---
 
 ## 📦 Project Structure
@@ -216,6 +219,43 @@ http://localhost:3000
 
 ---
 
+## 🔍 Distributed Request Tracing
+
+The platform supports end-to-end request traceability across synchronous HTTP requests and asynchronous Kafka event flows using correlation IDs and MDC-based logging.
+
+### Tracing Flow
+
+```text
+Incoming HTTP Request
+        ↓
+Correlation ID Filter
+        ↓
+User Service Logs
+        ↓
+Kafka Event Headers
+        ↓
+Notification Service Consumer
+        ↓
+Notification Processing Logs
+```
+
+### Features
+
+- Correlation ID generation using `X-Correlation-Id`
+- MDC-based contextual logging
+- Kafka header trace propagation
+- End-to-end trace visibility across services
+- Thread-safe MDC cleanup for Kafka consumers
+
+### Example Trace
+
+```text
+[user-service,traceId:trace-kafka-123]
+[notification-service,traceId:trace-kafka-123]
+```
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
@@ -243,6 +283,7 @@ cd notification-service && ./gradlew bootRun
 - ✅ Spring Boot Actuator enabled
 - ✅ Prometheus metrics endpoint exposed
 - ✅ Grafana observability dashboard implemented
+- ✅ Distributed request tracing with correlation IDs
 
 ---
 
