@@ -1,11 +1,13 @@
 package com.ramesh.notification_service.kafka;
 
 import com.ramesh.events.UserCreatedEvent;
+import com.ramesh.notification_service.common.CorrelationConstants;
 import com.ramesh.notification_service.entity.DeadLetterEvent;
 import com.ramesh.notification_service.repository.DeadLetterEventRepository;
 import com.ramesh.notification_service.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -17,6 +19,7 @@ import org.springframework.kafka.support.KafkaMessageHeaderAccessor;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 @Service
@@ -40,14 +43,22 @@ public class KafkaConsumerService {
                         @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
                         @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
                         @Header(KafkaHeaders.OFFSET) long offset,
+                        @Header(name = "traceId", required = false) byte[] traceIdHeader,
                         KafkaMessageHeaderAccessor accessor) {
 
         int attempt = accessor.getNonBlockingRetryDeliveryAttempt();
 
-        log.info("Received UserCreatedEvent | attempt: {} | topic: {} | partition: {} | offset: {} | eventId: {} | email: {}",
-                attempt, topic, partition, offset, event.getEventId(), event.getEmail());
+        String traceId = null;
+
+        if (traceIdHeader != null) {
+            traceId = new String(traceIdHeader, StandardCharsets.UTF_8);
+            MDC.put("traceId", traceId);
+        }
 
         try {
+            log.info("Received UserCreatedEvent | attempt: {} | topic: {} | partition: {} | offset: {} | eventId: {} | email: {}",
+                    attempt, topic, partition, offset, event.getEventId(), event.getEmail());
+
             boolean processed = notificationService.sendWelcomeNotification(
                     event, topic, partition, offset, attempt
             );
@@ -57,9 +68,7 @@ public class KafkaConsumerService {
                         event.getEventId(), event.getEmail(), attempt);
             }
 
-        }  catch (DataIntegrityViolationException ex) {
-            // ✅ Race condition: two threads passed idempotency check simultaneously
-            // DB unique constraint on event_id caught it — safe to ignore
+        } catch (DataIntegrityViolationException ex) {
             log.warn("Duplicate event caught at DB level — skipping | eventId: {} | userId: {}",
                     event.getEventId(), event.getId());
 
@@ -67,6 +76,9 @@ public class KafkaConsumerService {
             log.warn("Failed to process UserCreatedEvent | attempt: {}/4 | userId: {} | email: {} | error: {}",
                     attempt, event.getId(), event.getEmail(), ex.getMessage());
             throw ex;
+
+        } finally {
+            MDC.remove("traceId");
         }
     }
 
