@@ -183,18 +183,22 @@ The platform includes a local observability stack for monitoring distributed eve
 - Spring Boot Actuator
 - Micrometer
 - Prometheus
-- Grafana
+- Grafana 
+- Loki
+- Promtail
 
 ### Metrics Flow
 
 ```text
 Spring Boot Services
         ↓
-Actuator Prometheus Endpoints
+Actuator + Structured JSON Logs
         ↓
-Prometheus Scraping
+Prometheus Metrics Scraping + Promtail Log Shipping
         ↓
-Grafana Dashboards
+Prometheus + Loki
+        ↓
+Grafana Dashboards & Explore
 ```
 
 ### Dashboard Snapshot
@@ -216,6 +220,32 @@ Grafana Dashboards
 - Correlation ID propagation across Kafka events
 - Logs prepared for centralized aggregation with Loki/ELK
 
+### Centralized Logging
+
+The platform supports centralized log aggregation using Loki and Promtail for distributed debugging and cross-service traceability.
+
+### Logging Flow
+
+```text
+Spring Boot Services
+        ↓
+Structured JSON Logs
+        ↓
+Promtail
+        ↓
+Loki
+        ↓
+Grafana Explore
+```
+
+### Features
+
+- Centralized log aggregation
+- Distributed traceId search across services
+- Kafka workflow traceability
+- Grafana Explore integration
+- Structured JSON log ingestion
+
 ### Available Endpoints
 
 ```text
@@ -223,6 +253,8 @@ http://localhost:8080/actuator/prometheus
 http://localhost:8081/actuator/prometheus
 http://localhost:9090
 http://localhost:3000
+http://localhost:3100
+http://localhost:9080
 ```
 
 ---
@@ -292,6 +324,8 @@ cd notification-service && ./gradlew bootRun
 - ✅ Prometheus metrics endpoint exposed
 - ✅ Grafana observability dashboard implemented
 - ✅ Distributed request tracing with correlation IDs
+- ✅ Centralized logging with Loki and Promtail
+- ✅ Structured JSON logging with traceId enrichment
 
 ---
 
@@ -312,7 +346,7 @@ cd notification-service && ./gradlew bootRun
 - Introduce authentication (JWT)
 - Deploy to AWS EKS
 - Replace mock notifications with real email provider (AWS SES / SendGrid)
-- Add centralized logging (ELK)
+- Enhance centralized logging with advanced Loki pipelines
 - Add distributed tracing (OpenTelemetry)
 
 ---

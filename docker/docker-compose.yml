@@ -47,3 +47,23 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    depends_on:
+      - loki
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml
+      - ../user-service/logs:/var/log/user-service:ro
+      - ../notification-service/logs:/var/log/notification-service:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
