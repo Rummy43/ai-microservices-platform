@@ -208,6 +208,14 @@ Grafana Dashboards
 - CPU Utilization
 - Kafka Consumer Throughput
 
+### Logging
+
+- Structured JSON logging using Logback
+- MDC-based traceId enrichment
+- Service-level contextual logging
+- Correlation ID propagation across Kafka events
+- Logs prepared for centralized aggregation with Loki/ELK
+
 ### Available Endpoints
 
 ```text
