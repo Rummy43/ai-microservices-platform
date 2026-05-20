@@ -16,7 +16,24 @@ scrape_configs:
         labels:
           job: user-service
           service: user-service
+          app: user-service
           __path__: /var/log/user-service/*.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            logger: logger_name
+            thread: thread_name
+            message: message
+            traceId: traceId
+            service_name: service
+
+      - labels:
+          level:
+          traceId:
+          service_name:
 
   - job_name: notification-service
     static_configs:
@@ -25,4 +42,21 @@ scrape_configs:
         labels:
           job: notification-service
           service: notification-service
+          app: notification-service
           __path__: /var/log/notification-service/*.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            logger: logger_name
+            thread: thread_name
+            message: message
+            traceId: traceId
+            service_name: service
+
+      - labels:
+          level:
+          traceId:
+          service_name:

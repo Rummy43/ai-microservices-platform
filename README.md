@@ -223,7 +223,7 @@ Grafana Dashboards & Explore
 ### Centralized Logging
 
 The platform supports centralized log aggregation using Loki and Promtail for distributed debugging and cross-service traceability.
-
+![Loki Centralized Logging](docs/loki-centralized-logging.png)
 ### Logging Flow
 
 ```text
@@ -350,6 +350,18 @@ cd notification-service && ./gradlew bootRun
 - Add distributed tracing (OpenTelemetry)
 
 ---
+
+### Example Log Queries
+
+```logql
+{traceId="structured-kafka-test-123"}
+```
+
+```logql
+{service=~"user-service|notification-service", traceId="structured-kafka-test-123"}
+```
+
+These queries enable cross-service distributed request tracing through Kafka workflows using centralized log aggregation.
 
 ## 🤝 Contributing
 
