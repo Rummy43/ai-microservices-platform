@@ -1,0 +1,81 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-outbox-events-table
+      author: ramesh
+      changes:
+        - createTable:
+            tableName: outbox_events
+            columns:
+              - column:
+                  name: id
+                  type: BINARY(16)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: event_id
+                  type: BINARY(16)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: aggregate_id
+                  type: BINARY(16)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: aggregate_type
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: event_type
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: payload
+                  type: TEXT
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: retry_count
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: DATETIME
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: published_at
+                  type: DATETIME
+
+              - column:
+                  name: last_error
+                  type: TEXT
+
+        - createIndex:
+            tableName: outbox_events
+            indexName: idx_outbox_events_status_created_at
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: created_at
