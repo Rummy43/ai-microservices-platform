@@ -27,7 +27,8 @@ A simplified distributed workflow:
 1. **User Service**
    - Creates users
    - Persists data in MySQL
-   - Publishes `UserCreatedEvent` to Kafka
+   - Stores `UserCreatedEvent` in an outbox table within the same database transaction
+   - Publishes pending outbox events to Kafka through a scheduled publisher
 
 2. **Notification Service**
    - Consumes events from Kafka
@@ -85,6 +86,8 @@ Avro + Schema Registry ensures backward/forward compatibility.
 ### 🔹 Traceability
 Correlation IDs are propagated across HTTP requests and Kafka events for end-to-end distributed request tracing.
 
+### 🔹 Transactional Outbox
+User creation and event persistence happen in the same database transaction. A scheduled outbox publisher later publishes pending events to Kafka, reducing the risk of losing events when database writes succeed but Kafka publishing fails.
 ---
 
 ## 📦 Project Structure
@@ -106,10 +109,14 @@ ai-microservices-platform/
 ```
 User API Request
       ↓
-User Service (MySQL)
-      ↓ (Publish Event)
+User Service (MySQL Transaction)
+      ├── Save User
+      └── Save Outbox Event
+      ↓
+Outbox Publisher
+      ↓
 Kafka Topic
-      ↓ (Consume Event)
+      ↓
 Notification Service (PostgreSQL)
       ↓
 Idempotency Check → Process → Log Notification
@@ -326,6 +333,8 @@ cd notification-service && ./gradlew bootRun
 - ✅ Distributed request tracing with correlation IDs
 - ✅ Centralized logging with Loki and Promtail
 - ✅ Structured JSON logging with traceId enrichment
+- ✅ Transactional outbox pattern for reliable Kafka publishing
+- ✅ Scheduled outbox publisher with retry-safe status handling
 
 ---
 
