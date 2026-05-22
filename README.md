@@ -265,6 +265,17 @@ http://localhost:9080
 ```
 
 ---
+### Outbox Operational Metrics
+
+The platform exposes custom Micrometer metrics for monitoring transactional outbox health and Kafka publishing reliability.
+
+Monitored Outbox Metrics:
+- Pending outbox events
+- Processing outbox events
+- Failed outbox events
+
+These metrics are visualized in Grafana to provide operational visibility into asynchronous event delivery and distributed consistency workflows.
+---
 
 ## 🔍 Distributed Request Tracing
 
