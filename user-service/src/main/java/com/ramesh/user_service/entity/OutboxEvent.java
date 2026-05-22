@@ -51,6 +51,9 @@ public class OutboxEvent {
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
+    @Column(name = "processing_started_at")
+    private LocalDateTime processingStartedAt;
+
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 }

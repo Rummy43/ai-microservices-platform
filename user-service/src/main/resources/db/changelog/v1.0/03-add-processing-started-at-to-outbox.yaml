@@ -1,0 +1,12 @@
+databaseChangeLog:
+  - changeSet:
+      id: 03-add-processing-started-at-to-outbox
+      author: ramesh
+
+      changes:
+        - addColumn:
+            tableName: outbox_events
+            columns:
+              - column:
+                  name: processing_started_at
+                  type: DATETIME

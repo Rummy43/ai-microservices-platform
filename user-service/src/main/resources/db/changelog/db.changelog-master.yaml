@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/v1.0/01-create-users-table.yaml
   - include:
       file: db/changelog/v1.0/02-create-outbox-events-table.yaml.yaml
+  - include:
+      file: db/changelog/v1.0/03-add-processing-started-at-to-outbox.yaml
