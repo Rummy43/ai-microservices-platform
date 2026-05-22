@@ -210,7 +210,7 @@ Grafana Dashboards & Explore
 
 ### Dashboard Snapshot
 
-![Observability Dashboard](./docs/observability-dashboard.png)
+![Observability Dashboard](docs/observability-dashboard.png)
 
 ### Monitored Metrics
 
@@ -230,6 +230,7 @@ Grafana Dashboards & Explore
 ### Centralized Logging
 
 The platform supports centralized log aggregation using Loki and Promtail for distributed debugging and cross-service traceability.
+
 ![Loki Centralized Logging](docs/loki-centralized-logging.png)
 ### Logging Flow
 
@@ -265,7 +266,7 @@ http://localhost:9080
 ```
 
 ---
-### Outbox Operational Metrics
+### Transactional Outbox Operational Metrics
 
 The platform exposes custom Micrometer metrics for monitoring transactional outbox health and Kafka publishing reliability.
 
@@ -385,6 +386,6 @@ These queries enable cross-service distributed request tracing through Kafka wor
 
 ## 🤝 Contributing
 
-This project is built as part of a hands-on learning journey into distributed systems and microservices.
+This project demonstrates modern distributed systems architecture and operational engineering patterns using event-driven microservices.
 
 Feel free to explore, fork, and improve!
