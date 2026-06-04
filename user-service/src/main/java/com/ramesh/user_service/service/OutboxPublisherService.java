@@ -5,6 +5,7 @@ import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.user_service.entity.OutboxEvent;
 import com.ramesh.user_service.enums.OutboxEventStatus;
 import com.ramesh.user_service.kafka.EventPublisher;
+import com.ramesh.user_service.metrics.OutboxMetricsService;
 import com.ramesh.user_service.outbox.payload.UserCreatedOutboxPayload;
 import com.ramesh.user_service.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class OutboxPublisherService {
     private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final OutboxEventProcessingService processingService;
+    private final OutboxMetricsService metricsService;
 
     @Scheduled(fixedDelay = 5000)
     public void publishPendingEvents() {
@@ -59,6 +61,7 @@ public class OutboxPublisherService {
         try {
             if (!USER_CREATED_EVENT.equals(outboxEvent.getEventType())) {
                 outboxEvent.setStatus(OutboxEventStatus.FAILED);
+                metricsService.incrementFailed();
                 outboxEvent.setProcessingStartedAt(null);
                 outboxEvent.setLastError("Unsupported event type: " + outboxEvent.getEventType());
 
@@ -80,9 +83,12 @@ public class OutboxPublisherService {
                     .setEmail(payload.email())
                     .build();
 
-            eventPublisher.publishUserCreatedEvent(event);
+            metricsService.recordPublishDuration(() ->
+                    eventPublisher.publishUserCreatedEvent(event)
+            );
 
             outboxEvent.setStatus(OutboxEventStatus.PUBLISHED);
+            metricsService.incrementPublished();
             outboxEvent.setProcessingStartedAt(null);
             outboxEvent.setPublishedAt(LocalDateTime.now());
             outboxEvent.setLastError(null);
@@ -101,6 +107,7 @@ public class OutboxPublisherService {
 
             if (nextRetryCount >= MAX_RETRY_COUNT) {
                 outboxEvent.setStatus(OutboxEventStatus.FAILED);
+                metricsService.incrementFailed();
 
                 log.error("Outbox event permanently failed after max retries | outboxId: {} | eventId: {} | retryCount: {}",
                         outboxEvent.getId(), outboxEvent.getEventId(), nextRetryCount);

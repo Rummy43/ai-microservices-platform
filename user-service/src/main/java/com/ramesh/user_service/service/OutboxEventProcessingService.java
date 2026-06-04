@@ -2,6 +2,7 @@ package com.ramesh.user_service.service;
 
 import com.ramesh.user_service.entity.OutboxEvent;
 import com.ramesh.user_service.enums.OutboxEventStatus;
+import com.ramesh.user_service.metrics.OutboxMetricsService;
 import com.ramesh.user_service.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

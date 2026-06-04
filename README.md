@@ -50,6 +50,7 @@ A simplified distributed workflow:
 - Centralized contract management via `common-schema`
 - Heterogeneous persistence strategy (MySQL + PostgreSQL)
 - Containerized using Docker
+- Reliable event delivery using Transactional Outbox Pattern
 
 > See architecture diagram below 👇
 
@@ -82,7 +83,7 @@ Services communicate via events instead of direct REST calls.
 - Prevents duplicate side effects (e.g., multiple notifications)
 
 ### 🔹 Scalability
-Kafka enables horizontal scaling of consumers and producers.
+Kafka enables independent horizontal scaling of producers and consumers.
 
 ### 🔹 Schema Evolution
 Avro + Schema Registry ensures backward/forward compatibility.
@@ -92,6 +93,7 @@ Correlation IDs are propagated across HTTP requests and Kafka events for end-to-
 
 ### 🔹 Transactional Outbox
 User creation and event persistence happen in the same database transaction. A scheduled outbox publisher later publishes pending events to Kafka, reducing the risk of losing events when database writes succeed but Kafka publishing fails.
+
 ---
 
 ## 📦 Project Structure
@@ -136,6 +138,7 @@ Idempotency Check → Process → Log Notification
 - Spring Kafka
 - MapStruct
 - Lombok
+- OpenAPI / Swagger
 
 ### Messaging
 - Apache Kafka (KRaft mode)
@@ -214,16 +217,37 @@ Grafana Dashboards & Explore
 
 ### Dashboard Snapshot
 
-![Observability Dashboard](docs/observability-dashboard.png)
+Grafana dashboard providing visibility into:
+
+- JVM Heap Memory Usage
+- CPU Utilization
+- HTTP Request Rate
+- Kafka Consumer Throughput
+- Transactional Outbox Health
+- Event Publishing Metrics
+- Outbox Processing Performance
+
+![Observability Dashboard](docs/grafana-observability-dashboard.png)
 
 ### Monitored Metrics
 
+Infrastructure Metrics
+
 - JVM Heap Memory Usage
-- HTTP Request Rate
 - CPU Utilization
+- HTTP Request Rate
 - Kafka Consumer Throughput
 
-### Logging
+Transactional Outbox Metrics
+
+- Pending Outbox Events
+- Processing Outbox Events
+- Failed Outbox Events
+- Total Published Events
+- Publish Rate (events/sec)
+- Average Publish Duration
+
+### Structured Logging
 
 - Structured JSON logging using Logback
 - MDC-based traceId enrichment
@@ -261,25 +285,18 @@ Grafana Explore
 ### Available Endpoints
 
 ```text
+http://localhost:8080/swagger-ui.html
+http://localhost:8081/swagger-ui.html
+
 http://localhost:8080/actuator/prometheus
 http://localhost:8081/actuator/prometheus
+
 http://localhost:9090
 http://localhost:3000
 http://localhost:3100
 http://localhost:9080
 ```
 
----
-### Transactional Outbox Operational Metrics
-
-The platform exposes custom Micrometer metrics for monitoring transactional outbox health and Kafka publishing reliability.
-
-Monitored Outbox Metrics:
-- Pending outbox events
-- Processing outbox events
-- Failed outbox events
-
-These metrics are visualized in Grafana to provide operational visibility into asynchronous event delivery and distributed consistency workflows.
 ---
 
 ## 🔍 Distributed Request Tracing
@@ -351,6 +368,9 @@ cd notification-service && ./gradlew bootRun
 - ✅ Structured JSON logging with traceId enrichment
 - ✅ Transactional outbox pattern for reliable Kafka publishing
 - ✅ Scheduled outbox publisher with retry-safe status handling
+- ✅ Custom Micrometer metrics for transactional outbox monitoring
+- ✅ Grafana operational dashboard for outbox publishing visibility
+- ✅ Outbox publish rate and latency monitoring
 
 ---
 
@@ -372,7 +392,7 @@ cd notification-service && ./gradlew bootRun
 - Deploy to AWS EKS
 - Replace mock notifications with real email provider (AWS SES / SendGrid)
 - Enhance centralized logging with advanced Loki pipelines
-- Add distributed tracing (OpenTelemetry)
+- Upgrade correlation-ID tracing to OpenTelemetry distributed tracing
 
 ---
 
