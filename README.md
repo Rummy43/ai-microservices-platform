@@ -46,6 +46,7 @@ A simplified distributed workflow:
 
 - Event-driven communication using Kafka
 - Schema-based messaging using Avro + Schema Registry
+- API Gateway as a centralized entry point
 - Independent deployable microservices
 - Centralized contract management via `common-schema`
 - Heterogeneous persistence strategy (MySQL + PostgreSQL)
@@ -56,6 +57,25 @@ A simplified distributed workflow:
 
 ![Architecture](./docs/architecture.svg)
 
+---
+## API Gateway
+
+Spring Cloud Gateway provides a centralized entry point into the platform.
+
+### Responsibilities
+
+- Request routing
+- Correlation ID propagation
+- Centralized observability
+- Future JWT authentication
+- Future rate limiting
+
+### Current Routes
+
+| Route | Target Service |
+|---------|---------|
+| /api/v1/users/** | user-service |
+| /api/v1/notifications/** | notification-service |
 ---
 ## 📝 Articles
 | # | Article | Topics |
@@ -101,11 +121,12 @@ User creation and event persistence happen in the same database transaction. A s
 ```
 ai-microservices-platform/
 │
-├── user-service/              # Publishes user events (MySQL)
-├── notification-service/     # Consumes and processes events (PostgreSQL)
-├── common-schema/            # Shared Avro schemas (event contracts)
-├── docker/                   # Kafka + Schema Registry setup
-├── docs/                     # Architecture diagrams
+├── api-gateway            # Spring Cloud Gateway
+├── user-service           # Publishes user events (MySQL)
+├── notification-service   # Consumes and processes events (PostgreSQL)
+├── common-schema          # Shared Avro schemas
+├── docker                 # Kafka + Schema Registry setup
+├── docs                   # Architecture diagrams
 ```
 
 ---
@@ -113,7 +134,9 @@ ai-microservices-platform/
 ## 🔄 Event Flow
 
 ```
-User API Request
+Client Request
+      ↓
+API Gateway
       ↓
 User Service (MySQL Transaction)
       ├── Save User
@@ -285,11 +308,16 @@ Grafana Explore
 ### Available Endpoints
 
 ```text
+User Service:
 http://localhost:8080/swagger-ui.html
+
+Notification Service:
 http://localhost:8081/swagger-ui.html
 
-http://localhost:8080/actuator/prometheus
-http://localhost:8081/actuator/prometheus
+API Gateway:
+http://localhost:8082/api/v1/users/**
+http://localhost:8082/api/v1/notifications/**
+http://localhost:8082/actuator/prometheus
 
 http://localhost:9090
 http://localhost:3000
@@ -308,7 +336,9 @@ The platform supports end-to-end request traceability across synchronous HTTP re
 ```text
 Incoming HTTP Request
         ↓
-Correlation ID Filter
+API Gateway
+        ↓
+Gateway Correlation Filter
         ↓
 User Service Logs
         ↓
@@ -345,6 +375,7 @@ docker-compose up -d
 
 ### 2. Start Services
 ```bash
+cd api-gateway && ./gradlew bootRun
 cd user-service && ./gradlew bootRun
 cd notification-service && ./gradlew bootRun
 ```
@@ -371,6 +402,12 @@ cd notification-service && ./gradlew bootRun
 - ✅ Custom Micrometer metrics for transactional outbox monitoring
 - ✅ Grafana operational dashboard for outbox publishing visibility
 - ✅ Outbox publish rate and latency monitoring
+- ✅ Spring Cloud API Gateway 
+- ✅ Gateway-based routing 
+- ✅ Correlation ID propagation through Gateway 
+- ✅ Gateway Prometheus metrics 
+- ✅ Gateway Grafana monitoring
+- ✅ Centralized entry point for services
 
 ---
 
@@ -387,9 +424,11 @@ cd notification-service && ./gradlew bootRun
 
 ## 📈 Future Enhancements
 
-- Add API Gateway
-- Introduce authentication (JWT)
-- Deploy to AWS EKS
+- Service Discovery (Eureka)
+- JWT Authentication & Authorization
+- Rate Limiting
+- AWS EKS Deployment
+- OpenTelemetry Distributed Tracing
 - Replace mock notifications with real email provider (AWS SES / SendGrid)
 - Enhance centralized logging with advanced Loki pipelines
 - Upgrade correlation-ID tracing to OpenTelemetry distributed tracing
