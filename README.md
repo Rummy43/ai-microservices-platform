@@ -254,7 +254,7 @@ Grafana dashboard providing visibility into:
 - Event Publishing Metrics
 - Outbox Processing Performance
 
-![Observability Dashboard](docs/grafana-observability-dashboard.png)
+![Observability Dashboard](docs/grafana-observability-dashboard-v2.png)
 
 ### Monitored Metrics
 
