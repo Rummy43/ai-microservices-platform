@@ -163,6 +163,10 @@ Idempotency Check → Process → Log Notification
 - Lombok
 - OpenAPI / Swagger
 
+### API Gateway
+
+- Spring Cloud Gateway MVC
+
 ### Messaging
 - Apache Kafka (KRaft mode)
 - Confluent Schema Registry
@@ -319,9 +323,16 @@ http://localhost:8082/api/v1/users/**
 http://localhost:8082/api/v1/notifications/**
 http://localhost:8082/actuator/prometheus
 
+Prometheus:
 http://localhost:9090
+
+Grafana:
 http://localhost:3000
+
+Loki:
 http://localhost:3100
+
+Promtail:
 http://localhost:9080
 ```
 
