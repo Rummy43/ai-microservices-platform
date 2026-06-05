@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -49,4 +50,14 @@ public class UserController {
         log.info("Fetching user by id={}", id);
         return ResponseEntity.ok(userService.getUserById(id));
     }
+
+    /**
+     * Retrieves a user by their unique UUID.
+     */
+    @GetMapping
+    public ResponseEntity<List<UserResponseDTO>> getUsers() {
+        log.info("Fetching users");
+        return ResponseEntity.ok(userService.getAllUsers());
+    }
+
 }
