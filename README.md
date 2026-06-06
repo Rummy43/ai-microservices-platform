@@ -80,6 +80,49 @@ Spring Cloud Gateway provides a centralized entry point into the platform.
 | /api/v1/users/** | user-service |
 | /api/v1/notifications/** | notification-service |
 ---
+
+## API Gateway
+
+## 🔐 Authentication & Authorization
+
+The platform uses Keycloak as the Identity and Access Management (IAM) provider.
+
+### Features
+
+- OAuth2 Resource Server
+- JWT-based authentication
+- Role-Based Access Control (RBAC)
+- Centralized authentication at API Gateway
+- Realm role extraction from Keycloak tokens
+- Secure service access through Gateway
+
+### Implemented Roles
+
+| Role | Permissions |
+|--------|--------|
+| USER | Access user-facing APIs |
+| ADMIN | Access user APIs and administrative APIs |
+
+### Security Flow
+
+```text
+Client
+   ↓
+Keycloak Authentication
+   ↓
+JWT Access Token
+   ↓
+API Gateway
+   ↓
+JWT Validation
+   ↓
+Role Extraction
+   ↓
+RBAC Authorization
+   ↓
+Target Microservice
+
+---
 ## 📝 Articles
 | # | Article | Topics |
 |---|---------|--------|
@@ -426,6 +469,8 @@ cd notification-service && ./gradlew bootRun
 - ✅ JWT authentication at API Gateway
 - ✅ OAuth2 Resource Server configuration
 - ✅ Protected API routes
+- ✅ Role-Based Access Control (RBAC)
+- ✅ Keycloak realm-role mapping
 
 ---
 
@@ -443,7 +488,8 @@ cd notification-service && ./gradlew bootRun
 ## 📈 Future Enhancements
 
 - Service Discovery (Eureka)
-- JWT Authentication & Authorization
+- Fine-grained permission-based authorization
+- Identity propagation across microservices
 - Rate Limiting
 - AWS EKS Deployment
 - OpenTelemetry Distributed Tracing
