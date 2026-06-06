@@ -69,6 +69,9 @@ Spring Cloud Gateway provides a centralized entry point into the platform.
 - Centralized observability
 - Future JWT authentication
 - Future rate limiting
+- JWT authentication using Keycloak
+- OAuth2 Resource Server
+- Centralized authentication enforcement
 
 ### Current Routes
 
@@ -419,6 +422,10 @@ cd notification-service && ./gradlew bootRun
 - ✅ Gateway Prometheus metrics 
 - ✅ Gateway Grafana monitoring
 - ✅ Centralized entry point for services
+- ✅ Keycloak integration
+- ✅ JWT authentication at API Gateway
+- ✅ OAuth2 Resource Server configuration
+- ✅ Protected API routes
 
 ---
 
