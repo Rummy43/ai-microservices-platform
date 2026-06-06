@@ -81,8 +81,6 @@ Spring Cloud Gateway provides a centralized entry point into the platform.
 | /api/v1/notifications/** | notification-service |
 ---
 
-## API Gateway
-
 ## 🔐 Authentication & Authorization
 
 The platform uses Keycloak as the Identity and Access Management (IAM) provider.
@@ -121,8 +119,10 @@ Role Extraction
 RBAC Authorization
    ↓
 Target Microservice
+```
 
 ---
+
 ## 📝 Articles
 | # | Article | Topics |
 |---|---------|--------|
