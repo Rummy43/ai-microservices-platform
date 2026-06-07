@@ -52,6 +52,7 @@ A simplified distributed workflow:
 - Heterogeneous persistence strategy (MySQL + PostgreSQL)
 - Containerized using Docker
 - Reliable event delivery using Transactional Outbox Pattern
+- End-to-end identity propagation and audit context tracking
 
 > See architecture diagram below 👇
 
@@ -72,6 +73,7 @@ Spring Cloud Gateway provides a centralized entry point into the platform.
 - JWT authentication using Keycloak
 - OAuth2 Resource Server
 - Centralized authentication enforcement
+- Identity propagation to downstream services (trusted `X-User-*` headers)
 
 ### Current Routes
 
@@ -120,6 +122,56 @@ RBAC Authorization
    ↓
 Target Microservice
 ```
+
+---
+
+## 🪪 Identity Propagation & Audit Context
+
+While the API Gateway authenticates the caller and enforces RBAC, downstream services historically had no knowledge of *who* triggered a request. The platform now propagates the authenticated identity end-to-end — across synchronous HTTP hops and asynchronous Kafka event flows — so every service, event, and persisted record retains the originating actor for auditing and traceability.
+
+### How It Works
+
+1. **Gateway** — after JWT validation, an `IdentityPropagationFilter` extracts the identity from the already-verified token (`preferred_username`, `email`, realm roles) and injects it as trusted headers (`X-User-Name`, `X-User-Email`, `X-User-Roles`). These headers are **always overwritten**, so a client cannot spoof its own identity.
+2. **User Service** — an inbound filter rebuilds the identity into a thread-bound `IdentityContextHolder` and MDC. When a user is created, the actor and `traceId` are captured on the request thread and persisted **inside the same transaction** on the outbox row.
+3. **Outbox Publisher** — the scheduled publisher reads the actor/trace context from the persisted outbox row (not from ThreadLocal, which is absent on the scheduler thread) and emits it as Kafka headers alongside the event.
+4. **Notification Service** — the Kafka consumer rehydrates the actor from the inbound headers, re-binds it to the consumer thread + MDC, and persists it onto every `notification_log` and `dead_letter_event` record.
+
+### Propagation Contract
+
+| Transport | Identity Carrier |
+|-----------|------------------|
+| HTTP (Gateway → services) | `X-User-Name`, `X-User-Email`, `X-User-Roles` headers |
+| Persistence (outbox) | `actor_username`, `actor_email`, `actor_roles`, `trace_id` columns |
+| Kafka (user → notification) | `X-User-Name`, `X-User-Email`, `X-User-Roles`, `traceId` event headers |
+| Audit records | `actor_*` columns on `notification_log` and `dead_letter_events` |
+
+### Propagation Flow
+
+```text
+Keycloak JWT
+      ↓
+API Gateway (IdentityPropagationFilter → identity headers)
+      ↓
+User Service (IdentityContextHolder + MDC)
+      ↓
+Outbox Event (actor + traceId persisted in same transaction)
+      ↓
+Kafka Headers (actor + traceId)
+      ↓
+Notification Service (identity rehydrated onto consumer thread + MDC)
+      ↓
+notification_log / dead_letter_events (actor persisted)
+```
+
+### Features
+
+- Trusted, spoof-resistant identity headers minted at the gateway
+- Transport-agnostic `IdentityContext` reused across HTTP and Kafka
+- Thread-bound `IdentityContextHolder` with strict `finally` cleanup (virtual-thread safe)
+- Actor context captured transactionally with the outbox event
+- Actor identity carried through Kafka headers, surviving retries and DLQ
+- Durable audit trail: who triggered each notification and each dead-lettered event
+- MDC enrichment so structured logs carry `username`, `email`, and `roles`
 
 ---
 
@@ -182,19 +234,19 @@ ai-microservices-platform/
 ```
 Client Request
       ↓
-API Gateway
+API Gateway (JWT validation → inject identity headers)
       ↓
 User Service (MySQL Transaction)
       ├── Save User
-      └── Save Outbox Event
+      └── Save Outbox Event (+ actor & traceId)
       ↓
 Outbox Publisher
       ↓
-Kafka Topic
+Kafka Topic (event + actor & traceId headers)
       ↓
 Notification Service (PostgreSQL)
       ↓
-Idempotency Check → Process → Log Notification
+Idempotency Check → Process → Log Notification (+ actor)
 ```
 
 ---
@@ -324,6 +376,7 @@ Transactional Outbox Metrics
 
 - Structured JSON logging using Logback
 - MDC-based traceId enrichment
+- MDC enrichment with actor identity (`username`, `email`, `roles`)
 - Service-level contextual logging
 - Correlation ID propagation across Kafka events
 - Logs prepared for centralized aggregation with Loki/ELK
@@ -413,6 +466,7 @@ Notification Processing Logs
 - Kafka header trace propagation
 - End-to-end trace visibility across services
 - Thread-safe MDC cleanup for Kafka consumers
+- Actor identity (`username`, `email`, `roles`) propagated alongside the trace ID
 
 ### Example Trace
 
@@ -471,6 +525,12 @@ cd notification-service && ./gradlew bootRun
 - ✅ Protected API routes
 - ✅ Role-Based Access Control (RBAC)
 - ✅ Keycloak realm-role mapping
+- ✅ End-to-end identity propagation (Gateway → services → Kafka)
+- ✅ Trusted, spoof-resistant identity headers minted at the Gateway
+- ✅ Actor & traceId captured transactionally with the outbox event
+- ✅ Actor identity propagated through Kafka headers (retry/DLQ-safe)
+- ✅ Audit context persisted on notification logs and dead-letter events
+- ✅ MDC enrichment with actor identity for structured logging
 
 ---
 
@@ -489,7 +549,6 @@ cd notification-service && ./gradlew bootRun
 
 - Service Discovery (Eureka)
 - Fine-grained permission-based authorization
-- Identity propagation across microservices
 - Rate Limiting
 - AWS EKS Deployment
 - OpenTelemetry Distributed Tracing
