@@ -3,6 +3,8 @@ package com.ramesh.notification_service.service;
 import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.notification_service.entity.NotificationLog;
 import com.ramesh.notification_service.entity.ProcessedEvent;
+import com.ramesh.notification_service.identity.IdentityContext;
+import com.ramesh.notification_service.identity.IdentityContextHolder;
 import com.ramesh.notification_service.repository.NotificationLogRepository;
 import com.ramesh.notification_service.repository.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +82,11 @@ public class NotificationService {
                                  int attempt,
                                  String status,
                                  String errorMessage) {
+
+        // Identity is bound to the consumer thread by KafkaConsumerService from
+        // the event's propagated Kafka headers.
+        IdentityContext actor = IdentityContextHolder.get().orElse(null);
+
         notificationLogRepository.save(NotificationLog.builder()
                 .userId(event.getId().toString())
                 .email(event.getEmail().toString())
@@ -89,6 +96,9 @@ public class NotificationService {
                 .errorMessage(errorMessage)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
+                .actorUsername(actor != null ? actor.username() : null)
+                .actorEmail(actor != null ? actor.email() : null)
+                .actorRoles(actor != null && !actor.roles().isEmpty() ? actor.rolesAsString() : null)
                 .build());
     }
 }

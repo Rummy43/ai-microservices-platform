@@ -56,4 +56,18 @@ public class OutboxEvent {
 
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
+
+    // ---- Propagated identity / audit context (captured on the request thread) ----
+
+    @Column(name = "actor_username", length = 255)
+    private String actorUsername;
+
+    @Column(name = "actor_email", length = 255)
+    private String actorEmail;
+
+    @Column(name = "actor_roles", length = 512)
+    private String actorRoles;
+
+    @Column(name = "trace_id", length = 255)
+    private String traceId;
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.user_service.entity.OutboxEvent;
 import com.ramesh.user_service.enums.OutboxEventStatus;
+import com.ramesh.user_service.identity.IdentityContext;
 import com.ramesh.user_service.kafka.EventPublisher;
 import com.ramesh.user_service.metrics.OutboxMetricsService;
 import com.ramesh.user_service.outbox.payload.UserCreatedOutboxPayload;
@@ -83,8 +84,16 @@ public class OutboxPublisherService {
                     .setEmail(payload.email())
                     .build();
 
+            // Restore the audit/trace context captured when the event was created.
+            IdentityContext actor = IdentityContext.fromCsvRoles(
+                    outboxEvent.getActorUsername(),
+                    outboxEvent.getActorEmail(),
+                    outboxEvent.getActorRoles()
+            );
+            String traceId = outboxEvent.getTraceId();
+
             metricsService.recordPublishDuration(() ->
-                    eventPublisher.publishUserCreatedEvent(event)
+                    eventPublisher.publishUserCreatedEvent(event, traceId, actor)
             );
 
             outboxEvent.setStatus(OutboxEventStatus.PUBLISHED);

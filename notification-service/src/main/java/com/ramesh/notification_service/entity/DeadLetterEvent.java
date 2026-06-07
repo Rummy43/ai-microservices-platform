@@ -41,4 +41,15 @@ public class DeadLetterEvent {
 
     @Column(name = "reprocessed_at")
     private LocalDateTime reprocessedAt;
+
+    // ---- Propagated identity / audit context of the originating request ----
+
+    @Column(name = "actor_username")
+    private String actorUsername;
+
+    @Column(name = "actor_email")
+    private String actorEmail;
+
+    @Column(name = "actor_roles", length = 512)
+    private String actorRoles;
 }

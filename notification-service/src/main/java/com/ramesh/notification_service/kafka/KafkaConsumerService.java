@@ -2,7 +2,10 @@ package com.ramesh.notification_service.kafka;
 
 import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.notification_service.common.CorrelationConstants;
+import com.ramesh.notification_service.common.IdentityHeaders;
 import com.ramesh.notification_service.entity.DeadLetterEvent;
+import com.ramesh.notification_service.identity.IdentityContext;
+import com.ramesh.notification_service.identity.IdentityContextHolder;
 import com.ramesh.notification_service.repository.DeadLetterEventRepository;
 import com.ramesh.notification_service.service.NotificationService;
 import lombok.RequiredArgsConstructor;
@@ -43,21 +46,24 @@ public class KafkaConsumerService {
                         @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
                         @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
                         @Header(KafkaHeaders.OFFSET) long offset,
-                        @Header(name = "traceId", required = false) byte[] traceIdHeader,
+                        @Header(name = CorrelationConstants.KAFKA_TRACE_ID_HEADER, required = false) byte[] traceIdHeader,
+                        @Header(name = IdentityHeaders.KAFKA_USER_NAME, required = false) byte[] userNameHeader,
+                        @Header(name = IdentityHeaders.KAFKA_USER_EMAIL, required = false) byte[] userEmailHeader,
+                        @Header(name = IdentityHeaders.KAFKA_USER_ROLES, required = false) byte[] userRolesHeader,
                         KafkaMessageHeaderAccessor accessor) {
 
         int attempt = accessor.getNonBlockingRetryDeliveryAttempt();
 
-        String traceId = null;
-
-        if (traceIdHeader != null) {
-            traceId = new String(traceIdHeader, StandardCharsets.UTF_8);
-            MDC.put("traceId", traceId);
+        String traceId = decodeHeader(traceIdHeader);
+        if (traceId != null) {
+            MDC.put(CorrelationConstants.TRACE_ID, traceId);
         }
 
+        IdentityContext actor = restoreIdentityContext(userNameHeader, userEmailHeader, userRolesHeader);
+
         try {
-            log.info("Received UserCreatedEvent | attempt: {} | topic: {} | partition: {} | offset: {} | eventId: {} | email: {}",
-                    attempt, topic, partition, offset, event.getEventId(), event.getEmail());
+            log.info("Received UserCreatedEvent | attempt: {} | topic: {} | partition: {} | offset: {} | eventId: {} | email: {} | actor: {}",
+                    attempt, topic, partition, offset, event.getEventId(), event.getEmail(), actor.username());
 
             boolean processed = notificationService.sendWelcomeNotification(
                     event, topic, partition, offset, attempt
@@ -78,32 +84,90 @@ public class KafkaConsumerService {
             throw ex;
 
         } finally {
-            MDC.remove("traceId");
+            clearIdentityContext();
+            MDC.remove(CorrelationConstants.TRACE_ID);
         }
+    }
+
+    /** Rebuilds the originating user's identity from Kafka headers and binds it to the consumer thread + MDC. */
+    private IdentityContext restoreIdentityContext(byte[] userNameHeader,
+                                                   byte[] userEmailHeader,
+                                                   byte[] userRolesHeader) {
+
+        IdentityContext actor = IdentityContext.fromCsvRoles(
+                decodeHeader(userNameHeader),
+                decodeHeader(userEmailHeader),
+                decodeHeader(userRolesHeader)
+        );
+
+        IdentityContextHolder.set(actor);
+
+        if (actor.username() != null) {
+            MDC.put(IdentityHeaders.MDC_USERNAME, actor.username());
+        }
+        if (actor.email() != null) {
+            MDC.put(IdentityHeaders.MDC_EMAIL, actor.email());
+        }
+        if (!actor.roles().isEmpty()) {
+            MDC.put(IdentityHeaders.MDC_ROLES, actor.rolesAsString());
+        }
+
+        return actor;
+    }
+
+    private void clearIdentityContext() {
+        MDC.remove(IdentityHeaders.MDC_USERNAME);
+        MDC.remove(IdentityHeaders.MDC_EMAIL);
+        MDC.remove(IdentityHeaders.MDC_ROLES);
+        IdentityContextHolder.clear();
+    }
+
+    private String decodeHeader(byte[] header) {
+        return header != null ? new String(header, StandardCharsets.UTF_8) : null;
     }
 
     @DltHandler
     public void handleDlt(UserCreatedEvent event,
                           @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-                          @Header(KafkaHeaders.EXCEPTION_MESSAGE) String errorMessage) {
+                          @Header(KafkaHeaders.EXCEPTION_MESSAGE) String errorMessage,
+                          @Header(name = CorrelationConstants.KAFKA_TRACE_ID_HEADER, required = false) byte[] traceIdHeader,
+                          @Header(name = IdentityHeaders.KAFKA_USER_NAME, required = false) byte[] userNameHeader,
+                          @Header(name = IdentityHeaders.KAFKA_USER_EMAIL, required = false) byte[] userEmailHeader,
+                          @Header(name = IdentityHeaders.KAFKA_USER_ROLES, required = false) byte[] userRolesHeader) {
 
-        log.error("DEAD LETTER — all retries exhausted | eventId: {} | userId: {} | email: {} | topic: {} | error: {}",
-                event.getEventId(), event.getId(), event.getEmail(), topic, errorMessage);
+        String traceId = decodeHeader(traceIdHeader);
+        if (traceId != null) {
+            MDC.put(CorrelationConstants.TRACE_ID, traceId);
+        }
 
-        // ✅ Persist to DB for manual reprocessing / ops alerting
-        deadLetterEventRepository.save(DeadLetterEvent.builder()
-                .eventId(event.getEventId().toString())
-                .eventType("USER_CREATED")
-                .payload(String.format(
-                        "{\"eventId\":\"%s\",\"userId\":\"%s\",\"email\":\"%s\",\"firstName\":\"%s\",\"lastName\":\"%s\"}",
-                        event.getEventId(), event.getId(), event.getEmail(),   // ✅ eventId in payload too
-                        event.getFirstName(), event.getLastName()))
-                .topic(topic)
-                .lastError(errorMessage)
-                .failedAt(LocalDateTime.now())
-                .reprocessed(false)
-                .build());
+        IdentityContext actor = restoreIdentityContext(userNameHeader, userEmailHeader, userRolesHeader);
 
-        // TODO: alert ops team — PagerDuty / Slack webhook
+        try {
+            log.error("DEAD LETTER — all retries exhausted | eventId: {} | userId: {} | email: {} | topic: {} | actor: {} | error: {}",
+                    event.getEventId(), event.getId(), event.getEmail(), topic, actor.username(), errorMessage);
+
+            // ✅ Persist to DB for manual reprocessing / ops alerting — including
+            // the originating actor so triage retains the audit context.
+            deadLetterEventRepository.save(DeadLetterEvent.builder()
+                    .eventId(event.getEventId().toString())
+                    .eventType("USER_CREATED")
+                    .payload(String.format(
+                            "{\"eventId\":\"%s\",\"userId\":\"%s\",\"email\":\"%s\",\"firstName\":\"%s\",\"lastName\":\"%s\"}",
+                            event.getEventId(), event.getId(), event.getEmail(),   // ✅ eventId in payload too
+                            event.getFirstName(), event.getLastName()))
+                    .topic(topic)
+                    .lastError(errorMessage)
+                    .failedAt(LocalDateTime.now())
+                    .reprocessed(false)
+                    .actorUsername(actor.username())
+                    .actorEmail(actor.email())
+                    .actorRoles(actor.roles().isEmpty() ? null : actor.rolesAsString())
+                    .build());
+
+            // TODO: alert ops team — PagerDuty / Slack webhook
+        } finally {
+            clearIdentityContext();
+            MDC.remove(CorrelationConstants.TRACE_ID);
+        }
     }
 }

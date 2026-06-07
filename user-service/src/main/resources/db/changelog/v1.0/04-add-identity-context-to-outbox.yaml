@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 04-add-identity-context-to-outbox
+      author: ramesh
+
+      changes:
+        - addColumn:
+            tableName: outbox_events
+            columns:
+              - column:
+                  name: actor_username
+                  type: VARCHAR(255)
+              - column:
+                  name: actor_email
+                  type: VARCHAR(255)
+              - column:
+                  name: actor_roles
+                  type: VARCHAR(512)
+              - column:
+                  name: trace_id
+                  type: VARCHAR(255)

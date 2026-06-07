@@ -41,4 +41,15 @@ public class NotificationLog {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    // ---- Propagated identity / audit context of the originating request ----
+
+    @Column(name = "actor_username")
+    private String actorUsername;
+
+    @Column(name = "actor_email")
+    private String actorEmail;
+
+    @Column(name = "actor_roles", length = 512)
+    private String actorRoles;
 }

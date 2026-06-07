@@ -7,7 +7,7 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build-user-service:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,9 +24,38 @@ jobs:
         working-directory: ./common-schema
         run: mvn clean install -DskipTests
 
-      # This 'defaults' section tells GitHub to run commands inside user-service
+      # --- User Service ---
       - name: Build User Service
         working-directory: ./user-service
         run: |
           chmod +x gradlew
           ./gradlew build -x test
+
+      # Targeted unit tests only — the contextLoads @SpringBootTest needs live
+      # infra (MySQL/Kafka) and is intentionally excluded from CI.
+      - name: Test User Service (actor propagation)
+        working-directory: ./user-service
+        run: ./gradlew test --tests "*EventPublisherActorHeaderTest"
+
+      # --- Notification Service ---
+      - name: Build Notification Service
+        working-directory: ./notification-service
+        run: |
+          chmod +x gradlew
+          ./gradlew build -x test
+
+      # Targeted unit tests only — the contextLoads @SpringBootTest needs live
+      # infra (Kafka/PostgreSQL) and is intentionally excluded from CI.
+      - name: Test Notification Service (actor propagation)
+        working-directory: ./notification-service
+        run: ./gradlew test --tests "*ActorPropagationFlowTest"
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            user-service/build/reports/tests/test
+            notification-service/build/reports/tests/test
+          if-no-files-found: ignore
