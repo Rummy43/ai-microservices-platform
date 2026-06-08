@@ -21,7 +21,13 @@ repositories {
     }
 }
 
+configurations {
+    otelAgent
+}
+
 dependencies {
+    otelAgent 'io.opentelemetry.javaagent:opentelemetry-javaagent:2.11.0'
+
     // Web & Core
     implementation 'org.springframework.boot:spring-boot-starter-web' // Use starter-web for standard REST
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -63,6 +69,21 @@ dependencies {
 tasks.withType(JavaCompile) {
     options.compilerArgs << "-parameters"
     options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+}
+
+tasks.named('bootRun') {
+    def agent = configurations.otelAgent
+    doFirst {
+        jvmArgs = [
+            "-javaagent:${agent.singleFile}",
+            "-Dotel.service.name=user-service",
+            "-Dotel.traces.exporter=otlp",
+            "-Dotel.metrics.exporter=none",
+            "-Dotel.logs.exporter=none",
+            "-Dotel.exporter.otlp.protocol=http/protobuf",
+            "-Dotel.exporter.otlp.endpoint=http://localhost:4318"
+        ]
+    }
 }
 
 tasks.named('test') {

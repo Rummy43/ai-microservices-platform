@@ -40,6 +40,17 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
 
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: -config.file=/etc/tempo/tempo.yml
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -47,6 +58,9 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - tempo
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
 
   loki:
     image: grafana/loki:latest

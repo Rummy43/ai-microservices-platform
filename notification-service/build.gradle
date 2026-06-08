@@ -21,7 +21,13 @@ repositories {
 	}
 }
 
+configurations {
+	otelAgent
+}
+
 dependencies {
+	otelAgent 'io.opentelemetry.javaagent:opentelemetry-javaagent:2.11.0'
+
 	implementation 'org.springframework.boot:spring-boot-starter-kafka'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -46,6 +52,21 @@ dependencies {
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+tasks.named('bootRun') {
+	def agent = configurations.otelAgent
+	doFirst {
+		jvmArgs = [
+			"-javaagent:${agent.singleFile}",
+			"-Dotel.service.name=notification-service",
+			"-Dotel.traces.exporter=otlp",
+			"-Dotel.metrics.exporter=none",
+			"-Dotel.logs.exporter=none",
+			"-Dotel.exporter.otlp.protocol=http/protobuf",
+			"-Dotel.exporter.otlp.endpoint=http://localhost:4318"
+		]
+	}
 }
 
 tasks.named('test') {
