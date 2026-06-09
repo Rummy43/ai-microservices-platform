@@ -287,6 +287,9 @@ Idempotency Check → Process → Log Notification (+ actor)
 - Micrometer
 - Prometheus
 - Grafana
+- OpenTelemetry Java Agent
+- Grafana Tempo (distributed tracing)
+- Service Map / Dependency Graph
 - JVM metrics monitoring
 - HTTP request rate monitoring
 - Kafka consumer throughput monitoring
@@ -325,6 +328,8 @@ The platform includes a local observability stack for monitoring distributed eve
 - Grafana 
 - Loki
 - Promtail
+- OpenTelemetry Java Agent
+- Grafana Tempo (traces + service-graph metrics)
 
 ### Metrics Flow
 
@@ -477,6 +482,68 @@ Notification Processing Logs
 
 ---
 
+## 🛰 OpenTelemetry Tracing & Service Map
+
+Building on correlation-ID logging, the platform now emits **true distributed traces** using the **OpenTelemetry Java Agent**. The agent auto-instruments the HTTP, JDBC, and messaging layers with **zero application code changes**, exports spans over OTLP to **Grafana Tempo**, and stitches them into end-to-end traces via W3C `traceparent` context propagation.
+
+### Tracing Pipeline
+
+```text
+Spring Boot Services (OpenTelemetry Java Agent)
+        ↓  OTLP (http/protobuf :4318)
+Grafana Tempo
+        ↓
+Grafana (Explore → Tempo → Search / Trace View)
+```
+
+Each service attaches the agent at `bootRun` and sets `otel.service.name`. The synchronous request path `api-gateway → user-service → MySQL` appears as a single connected trace in Tempo.
+
+### Service Map / Dependency Graph
+
+Service relationships are generated **automatically from trace data** — edges are never wired by hand. Tempo's **metrics-generator** derives service-graph metrics from spans and **remote-writes** them to Prometheus, which Grafana's Tempo data source queries to render the **Service Graph** (node graph) view.
+
+```text
+Tempo (service-graphs processor)
+        ↓  traces_service_graph_* metrics (remote_write)
+Prometheus (--web.enable-remote-write-receiver)
+        ↓  queried via Tempo data source (serviceMap link)
+Grafana → Explore → Tempo → Service Graph
+```
+
+**Configuration added:**
+
+| File | Change | Purpose |
+|------|--------|---------|
+| `docker/tempo/tempo.yml` | `metrics_generator` + `overrides` enabling the `service-graphs` processor and remote-write to Prometheus | Generate service-graph metrics from spans |
+| `docker/docker-compose.yml` | `--web.enable-remote-write-receiver` flag on Prometheus | Allow Tempo to remote-write metrics |
+| `docker/grafana/provisioning/datasources/tempo.yml` | Prometheus data source + Tempo `serviceMap.datasourceUid` and `nodeGraph` | Render the dependency graph in Grafana |
+
+**Verify the generated edges (Prometheus):**
+
+```promql
+traces_service_graph_request_total
+```
+
+Synchronous service relationships and database dependencies — e.g. `api-gateway → user-service`, `user-service → MySQL`, `notification-service → PostgreSQL` — appear as edges in Grafana's Service Graph.
+
+> **Known limitation:** the asynchronous `user-service → notification-service` edge requires the Kafka producer and consumer spans to share a trace. The current OpenTelemetry Java Agent build does not emit Kafka messaging spans under the platform's Spring Boot version, so this messaging edge is not yet rendered. It is tracked as a follow-up (agent upgrade); synchronous HTTP and database edges are generated and visible today.
+
+### Features
+
+- Zero-code distributed tracing via the OpenTelemetry Java Agent
+- OTLP span export to Grafana Tempo
+- W3C trace-context propagation across HTTP hops
+- Service Map / Dependency Graph generated automatically from trace data
+- Tempo metrics-generator → Prometheus remote-write → Grafana Service Graph
+
+### Service Graph Example
+
+The service graph below is generated automatically from distributed trace data collected by OpenTelemetry and processed by Grafana Tempo.
+
+![Service Graph](docs/grafana-service-graph.png)
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
@@ -531,6 +598,11 @@ cd notification-service && ./gradlew bootRun
 - ✅ Actor identity propagated through Kafka headers (retry/DLQ-safe)
 - ✅ Audit context persisted on notification logs and dead-letter events
 - ✅ MDC enrichment with actor identity for structured logging
+- ✅ OpenTelemetry Java Agent instrumentation (zero application code changes)
+- ✅ OTLP trace export to Grafana Tempo
+- ✅ End-to-end traces for `api-gateway → user-service → MySQL`
+- ✅ Service Map / Dependency Graph generation (Tempo metrics-generator → Prometheus remote-write → Grafana Service Graph)
+- 🚧 Asynchronous `user-service → notification-service` service-map edge (pending Kafka span instrumentation / OTel agent upgrade)
 
 ---
 
@@ -551,10 +623,10 @@ cd notification-service && ./gradlew bootRun
 - Fine-grained permission-based authorization
 - Rate Limiting
 - AWS EKS Deployment
-- OpenTelemetry Distributed Tracing
 - Replace mock notifications with real email provider (AWS SES / SendGrid)
 - Enhance centralized logging with advanced Loki pipelines
-- Upgrade correlation-ID tracing to OpenTelemetry distributed tracing
+- Kafka messaging span instrumentation (OTel agent upgrade) to complete the asynchronous service-map edge
+- Trace-to-logs correlation between Tempo and Loki
 
 ---
 
