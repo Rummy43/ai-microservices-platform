@@ -380,7 +380,7 @@ Transactional Outbox Metrics
 ### Structured Logging
 
 - Structured JSON logging using Logback
-- MDC-based traceId enrichment
+- OpenTelemetry `traceId`/`spanId` enrichment via MDC (agent-injected, zero code changes)
 - MDC enrichment with actor identity (`username`, `email`, `roles`)
 - Service-level contextual logging
 - Correlation ID propagation across Kafka events
@@ -544,6 +544,55 @@ The service graph below is generated automatically from distributed trace data c
 
 ---
 
+## 🔗 Correlated Logging — Trace ↔ Log Navigation
+
+Metrics, traces, and logs are now **cross-linked into a single debugging workflow**. Every structured JSON log line carries the active OpenTelemetry `traceId` and `spanId` (injected into the MDC by the OTel Java Agent — no application code changes), which lets Grafana pivot between Loki and Tempo in both directions:
+
+- **Logs → Traces:** a Loki *derived field* extracts the `traceId` from the log line and renders a **View Trace** link that opens the full distributed trace in Tempo.
+- **Traces → Logs:** Tempo's `tracesToLogsV2` link jumps from any span to the matching Loki log stream, time-shifted around the span and filtered by trace ID.
+
+### Correlation Flow
+
+```text
+Structured JSON Log (traceId, spanId)          Tempo Trace (spans)
+        │                                              │
+        │  Loki derived field                          │  tracesToLogsV2
+        │  "traceId":"(\w+)" → View Trace              │  span → service logs ±5m
+        ▼                                              ▼
+   Tempo Trace View   ◄────────────────────►   Loki Log Stream
+```
+
+### Configuration
+
+| File | Change | Purpose |
+|------|--------|---------|
+| `*/logback-spring.xml` | `traceId` / `spanId` MDC fields in the JSON encoder | Embed OTel trace context in every log line |
+| `docker/grafana/provisioning/datasources/tempo.yml` | Loki `derivedFields` (regex → internal link → Tempo UID) | Logs → traces navigation |
+| `docker/grafana/provisioning/datasources/tempo.yml` | Tempo `tracesToLogsV2` (Loki UID, `service.name` tag mapping, ±5m time shift) | Traces → logs navigation |
+| `docker/promtail/promtail-config.yml` | Removed `traceId` from the Promtail `labels` stage | Keep Loki label cardinality bounded — trace IDs are unbounded and would create one stream per request; the derived-field regex matches on **line content**, so no label is needed |
+
+### Usage
+
+In **Explore → Loki**, query for trace-bearing lines and expand a log row — the **View Trace** button appears under *Links*:
+
+```logql
+{job="user-service"} |~ `"traceId":"[0-9a-f]+"`
+```
+
+In **Explore → Tempo**, open any span and use the **logs** link to jump to the correlated Loki stream.
+
+> **Known limitation:** log lines emitted on Kafka consumer threads and the `@Scheduled` outbox publisher currently log an empty `traceId` — OTel context is not yet propagated onto those threads (same root cause as the missing Kafka service-map edge). HTTP request-path logs are fully correlated today.
+
+### Features
+
+- OTel `traceId`/`spanId` embedded in structured JSON logs across all services
+- One-click pivot from any log line to its distributed trace (Loki → Tempo)
+- One-click pivot from any span to its correlated logs (Tempo → Loki)
+- Cardinality-safe Loki ingestion (trace IDs kept out of stream labels)
+- Provisioned as code — the entire correlation setup lives in version-controlled datasource provisioning
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
@@ -602,7 +651,11 @@ cd notification-service && ./gradlew bootRun
 - ✅ OTLP trace export to Grafana Tempo
 - ✅ End-to-end traces for `api-gateway → user-service → MySQL`
 - ✅ Service Map / Dependency Graph generation (Tempo metrics-generator → Prometheus remote-write → Grafana Service Graph)
-- 🚧 Asynchronous `user-service → notification-service` service-map edge (pending Kafka span instrumentation / OTel agent upgrade)
+- ✅ OTel `traceId`/`spanId` embedded in structured JSON logs
+- ✅ Logs → traces navigation via Loki derived fields (**View Trace** → Tempo)
+- ✅ Traces → logs navigation via Tempo `tracesToLogsV2` (span → Loki stream)
+- ✅ Cardinality-safe Loki ingestion (trace IDs queried from line content, not stream labels)
+- 🚧 Asynchronous `user-service → notification-service` service-map edge and consumer/scheduler-thread trace context (pending Kafka span instrumentation / OTel agent upgrade)
 
 ---
 
@@ -625,22 +678,23 @@ cd notification-service && ./gradlew bootRun
 - AWS EKS Deployment
 - Replace mock notifications with real email provider (AWS SES / SendGrid)
 - Enhance centralized logging with advanced Loki pipelines
-- Kafka messaging span instrumentation (OTel agent upgrade) to complete the asynchronous service-map edge
-- Trace-to-logs correlation between Tempo and Loki
+- Kafka messaging span instrumentation (OTel agent upgrade) to complete the asynchronous service-map edge and extend trace/log correlation to consumer and scheduler threads
 
 ---
 
 ### Example Log Queries
 
+Trace IDs are intentionally **not** Loki stream labels (unbounded cardinality); they live in the log line content and are queried with line filters:
+
 ```logql
-{traceId="structured-kafka-test-123"}
+{service="user-service"} |= `"traceId":"7de94c15e1a7f24edc23856f1a67064c"`
 ```
 
 ```logql
-{service=~"user-service|notification-service", traceId="structured-kafka-test-123"}
+{service=~"user-service|notification-service"} |~ `"traceId":"[0-9a-f]+"`
 ```
 
-These queries enable cross-service distributed request tracing through Kafka workflows using centralized log aggregation.
+These queries enable cross-service distributed request tracing through Kafka workflows using centralized log aggregation — and each matching line links directly to its Tempo trace via the **View Trace** derived field.
 
 ## 🤝 Contributing
 
