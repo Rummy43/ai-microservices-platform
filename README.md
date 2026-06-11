@@ -561,6 +561,14 @@ Structured JSON Log (traceId, spanId)          Tempo Trace (spans)
         ▼                                              ▼
    Tempo Trace View   ◄────────────────────►   Loki Log Stream
 ```
+### Trace ↔ Log Correlation
+
+The screenshot below demonstrates bidirectional navigation between Loki and Tempo.
+
+- Logs → Trace using View Trace
+- Trace → Logs using Tempo trace links
+
+![Trace Log Correlation](docs/grafana-trace-log-correlation.png)
 
 ### Configuration
 
