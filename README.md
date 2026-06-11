@@ -601,6 +601,82 @@ In **Explore → Tempo**, open any span and use the **logs** link to jump to the
 
 ---
 
+## 📊 Production-Grade Grafana Dashboards (Provisioned as Code)
+
+The platform ships **five purpose-built Grafana dashboards**, provisioned entirely from version-controlled JSON — no hand-built panels, no click-ops. Dashboards land automatically in the **AI Microservices Platform** folder on startup and reload within 30 seconds of a file change.
+
+```text
+docker/grafana/provisioning/dashboards/
+├── dashboards.yml          # file provider (folder, reload interval)
+└── json/
+    ├── jvm-dashboard.json        # Platform / JVM
+    ├── http-dashboard.json       # Platform / HTTP
+    ├── kafka-dashboard.json      # Platform / Kafka
+    ├── database-dashboard.json   # Platform / Database
+    └── business-dashboard.json   # Platform / Business
+```
+
+### Dashboard Catalog
+
+| Dashboard | Scope | Key Panels |
+|-----------|-------|------------|
+| **Platform / JVM** | All services (templated `$service` variable) | Heap used vs max, heap %, GC pause rate & max pause, live threads, thread states, process/system CPU, loaded classes |
+| **Platform / HTTP** | All services | Request rate (per service & per endpoint), 4xx/5xx error rate, 5xx error ratio, average & max latency |
+| **Platform / Kafka** | Producer + consumer | Consumer throughput (records/s), consumer lag per partition, listener processing rate & latency, producer send rate, rebalances/heartbeats |
+| **Platform / Database** | MySQL + PostgreSQL via HikariCP | Active/idle/max connections, pending threads & acquire timeouts, connection acquire/usage time, top-10 repository query rate & latency |
+| **Platform / Business** | Domain KPIs | Users created, creation failures by reason, notifications sent/failed/duplicates suppressed, outbox publish rate & failures, outbox backlog, end-to-end funnel |
+
+### Business Metrics (Custom Micrometer Instrumentation)
+
+A metrics audit showed that JVM, HTTP, HikariCP, Spring Data, and Kafka client metrics were already exposed by Micrometer auto-instrumentation, and the transactional outbox was already instrumented (`outbox_*`). Phase 5 adds **only the missing business-layer counters**:
+
+| Metric | Type | Service | Meaning |
+|--------|------|---------|---------|
+| `users_registered_total` | Counter | user-service | Successfully created users |
+| `users_creation_failed_total{reason}` | Counter | user-service | Failed creations, split by `duplicate_email` vs `error` |
+| `notifications_sent_total` | Counter | notification-service | Welcome notifications sent |
+| `notifications_failed_total` | Counter | notification-service | Notification attempts that threw |
+| `notifications_duplicate_total` | Counter | notification-service | Duplicates suppressed by the idempotent consumer (app-level + DB-constraint level) |
+| `outbox_published_total` / `outbox_failed_total` | Counter | user-service | Outbox publish outcomes *(pre-existing)* |
+| `outbox_pending` / `outbox_processing` / `outbox_failed` | Gauge | user-service | Live outbox backlog by lifecycle state *(pre-existing)* |
+| `outbox_publish_duration_seconds` | Timer | user-service | Outbox publish latency *(pre-existing)* |
+
+> **Naming note:** the "users created" counter is exposed as `users_registered_total` rather than `users_created_total` — OpenMetrics reserves the `_created` suffix, and the Prometheus client silently strips it (the metric would surface as `users_total`).
+
+The **Business dashboard's funnel panel** correlates the three counters end-to-end: every `users_registered_total` increment should eventually produce one `outbox_published_total` and one `notifications_sent_total` — divergence between the three lines is an immediate signal of event loss, backlog growth, or consumer failure.
+
+### Dashboard Screenshots
+
+![JVM Dashboard](docs/dashboards/jvm-dashboard.png)
+![HTTP Dashboard](docs/dashboards/http-dashboard.png)
+![Kafka Dashboard](docs/dashboards/kafka-dashboard.png)
+![Database Dashboard](docs/dashboards/database-dashboard.png)
+![Business Dashboard](docs/dashboards/business-dashboard.png)
+
+### Verifying the Setup
+
+```bash
+# 1. Business counters exposed by the services
+curl -s localhost:8080/actuator/prometheus | grep -E "users_(registered|creation_failed)"
+curl -s localhost:8081/actuator/prometheus | grep -E "notifications_(sent|failed|duplicate)_total"
+
+# 2. Prometheus has scraped them
+curl -s 'localhost:9090/api/v1/query?query=users_registered_total'
+
+# 3. Dashboards provisioned (Grafana API)
+curl -s -u admin:admin 'localhost:3000/api/search?tag=platform'
+```
+
+Then create a user (and repeat the same request once to trigger the duplicate-email path) and watch the Business dashboard panels move:
+
+```bash
+curl -X POST localhost:8082/api/v1/users -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@test.com","firstName":"Demo","lastName":"User"}'
+```
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
@@ -663,6 +739,9 @@ cd notification-service && ./gradlew bootRun
 - ✅ Logs → traces navigation via Loki derived fields (**View Trace** → Tempo)
 - ✅ Traces → logs navigation via Tempo `tracesToLogsV2` (span → Loki stream)
 - ✅ Cardinality-safe Loki ingestion (trace IDs queried from line content, not stream labels)
+- ✅ Five provisioned Grafana dashboards (JVM, HTTP, Kafka, Database, Business) as version-controlled JSON
+- ✅ Business KPI instrumentation: users registered/failed, notifications sent/failed/duplicate
+- ✅ End-to-end business funnel panel (users → outbox → notifications)
 - 🚧 Asynchronous `user-service → notification-service` service-map edge and consumer/scheduler-thread trace context (pending Kafka span instrumentation / OTel agent upgrade)
 
 ---

@@ -1,0 +1,91 @@
+{
+  "uid": "platform-database",
+  "title": "Platform / Database",
+  "tags": ["platform", "database"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(hikaricp_connections, job)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Connection Pool (active / idle / max)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "hikaricp_connections_active{job=~\"$service\"}", "legendFormat": "{{job}} active" },
+        { "expr": "hikaricp_connections_idle{job=~\"$service\"}", "legendFormat": "{{job}} idle" },
+        { "expr": "hikaricp_connections_max{job=~\"$service\"}", "legendFormat": "{{job}} max" }
+      ]
+    },
+    {
+      "title": "Threads Awaiting Connection",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "hikaricp_connections_pending{job=~\"$service\"}", "legendFormat": "{{job}} pending" },
+        { "expr": "sum by (job) (rate(hikaricp_connections_timeout_total{job=~\"$service\"}[5m]))", "legendFormat": "{{job}} timeouts/s" }
+      ]
+    },
+    {
+      "title": "Connection Acquire Time",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job) (rate(hikaricp_connections_acquire_seconds_sum{job=~\"$service\"}[5m])) / sum by (job) (rate(hikaricp_connections_acquire_seconds_count{job=~\"$service\"}[5m]))", "legendFormat": "{{job}} avg" },
+        { "expr": "max by (job) (hikaricp_connections_acquire_seconds_max{job=~\"$service\"})", "legendFormat": "{{job}} max" }
+      ]
+    },
+    {
+      "title": "Connection Usage Time",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job) (rate(hikaricp_connections_usage_seconds_sum{job=~\"$service\"}[5m])) / sum by (job) (rate(hikaricp_connections_usage_seconds_count{job=~\"$service\"}[5m]))", "legendFormat": "{{job}} avg" },
+        { "expr": "max by (job) (hikaricp_connections_usage_seconds_max{job=~\"$service\"})", "legendFormat": "{{job}} max" }
+      ]
+    },
+    {
+      "title": "Repository Query Rate (top methods)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "topk(10, sum by (job, repository, method) (rate(spring_data_repository_invocations_seconds_count{job=~\"$service\"}[5m])))", "legendFormat": "{{job}} {{repository}}.{{method}}" }
+      ]
+    },
+    {
+      "title": "Repository Query Latency (avg, top methods)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "topk(10, sum by (job, repository, method) (rate(spring_data_repository_invocations_seconds_sum{job=~\"$service\"}[5m])) / sum by (job, repository, method) (rate(spring_data_repository_invocations_seconds_count{job=~\"$service\"}[5m])))", "legendFormat": "{{job}} {{repository}}.{{method}}" }
+      ]
+    }
+  ]
+}

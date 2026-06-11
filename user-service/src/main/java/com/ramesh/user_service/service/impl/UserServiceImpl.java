@@ -7,6 +7,7 @@ import com.ramesh.user_service.entity.User;
 import com.ramesh.user_service.exception.ResourceConflictException;
 import com.ramesh.user_service.exception.ResourceNotFoundException;
 import com.ramesh.user_service.mapper.UserMapper;
+import com.ramesh.user_service.metrics.UserMetricsService;
 import com.ramesh.user_service.repository.UserRepository;
 import com.ramesh.user_service.service.OutboxEventService;
 import com.ramesh.user_service.service.UserService;
@@ -26,6 +27,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final OutboxEventService outboxEventService;
+    private final UserMetricsService userMetricsService;
 
     @Override
     @Transactional
@@ -34,25 +36,32 @@ public class UserServiceImpl implements UserService {
 
         if (userRepository.existsByEmail(dto.email())) {
             log.warn("User creation rejected — email already exists | email: {}", dto.email());
+            userMetricsService.incrementFailedDuplicateEmail();
             throw new ResourceConflictException("Email already registered");
         }
 
-        User user = userMapper.toEntity(dto);
-        User savedUser = userRepository.save(user);
-        log.info("User persisted successfully | userId: {} | email: {}",
-                savedUser.getId(), savedUser.getEmail());
+        try {
+            User user = userMapper.toEntity(dto);
+            User savedUser = userRepository.save(user);
+            log.info("User persisted successfully | userId: {} | email: {}",
+                    savedUser.getId(), savedUser.getEmail());
 
-        UserCreatedEvent event = UserCreatedEvent.newBuilder()
-                .setEventId(UUID.randomUUID().toString())
-                .setId(savedUser.getId().toString())
-                .setEmail(savedUser.getEmail())
-                .setFirstName(savedUser.getFirstName())
-                .setLastName(savedUser.getLastName())
-                .build();
+            UserCreatedEvent event = UserCreatedEvent.newBuilder()
+                    .setEventId(UUID.randomUUID().toString())
+                    .setId(savedUser.getId().toString())
+                    .setEmail(savedUser.getEmail())
+                    .setFirstName(savedUser.getFirstName())
+                    .setLastName(savedUser.getLastName())
+                    .build();
 
-        outboxEventService.saveUserCreatedEvent(event);
+            outboxEventService.saveUserCreatedEvent(event);
 
-        return userMapper.toResponse(savedUser);
+            userMetricsService.incrementCreated();
+            return userMapper.toResponse(savedUser);
+        } catch (RuntimeException e) {
+            userMetricsService.incrementFailedError();
+            throw e;
+        }
     }
 
     @Override

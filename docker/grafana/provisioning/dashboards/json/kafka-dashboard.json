@@ -1,0 +1,74 @@
+{
+  "uid": "platform-kafka",
+  "title": "Platform / Kafka",
+  "tags": ["platform", "kafka"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "title": "Consumer Throughput (records/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job, topic) (rate(kafka_consumer_fetch_manager_records_consumed_total[5m]))", "legendFormat": "{{job}} {{topic}}" }
+      ]
+    },
+    {
+      "title": "Consumer Lag (records)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job, topic, partition) (kafka_consumer_fetch_manager_records_lag)", "legendFormat": "{{job}} {{topic}}-{{partition}}" },
+        { "expr": "max by (job) (kafka_consumer_fetch_manager_records_lag_max)", "legendFormat": "{{job}} max lag" }
+      ]
+    },
+    {
+      "title": "Listener Processing Rate (msg/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job, name, result) (rate(spring_kafka_listener_seconds_count[5m]))", "legendFormat": "{{job}} {{name}} ({{result}})" }
+      ]
+    },
+    {
+      "title": "Listener Processing Latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job) (rate(spring_kafka_listener_seconds_sum[5m])) / sum by (job) (rate(spring_kafka_listener_seconds_count[5m]))", "legendFormat": "{{job}} avg" },
+        { "expr": "max by (job) (spring_kafka_listener_seconds_max)", "legendFormat": "{{job}} max" }
+      ]
+    },
+    {
+      "title": "Producer Send Rate (msg/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job, result) (rate(spring_kafka_template_seconds_count[5m]))", "legendFormat": "{{job}} ({{result}})" }
+      ]
+    },
+    {
+      "title": "Consumer Rebalances / Heartbeats",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job) (kafka_consumer_coordinator_failed_rebalance_total)", "legendFormat": "{{job}} failed rebalances" },
+        { "expr": "sum by (job) (rate(kafka_consumer_coordinator_heartbeat_total[5m]))", "legendFormat": "{{job}} heartbeats/s" }
+      ]
+    }
+  ]
+}

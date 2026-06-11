@@ -5,6 +5,7 @@ import com.ramesh.notification_service.entity.NotificationLog;
 import com.ramesh.notification_service.entity.ProcessedEvent;
 import com.ramesh.notification_service.identity.IdentityContext;
 import com.ramesh.notification_service.identity.IdentityContextHolder;
+import com.ramesh.notification_service.metrics.NotificationMetricsService;
 import com.ramesh.notification_service.repository.NotificationLogRepository;
 import com.ramesh.notification_service.repository.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class NotificationService {
 
     private final ProcessedEventRepository processedEventRepository;
     private final NotificationLogRepository notificationLogRepository;
+    private final NotificationMetricsService notificationMetricsService;
 
     @Transactional
     public boolean sendWelcomeNotification(UserCreatedEvent event,
@@ -36,6 +38,7 @@ public class NotificationService {
         if (processedEventRepository.existsByEventId(eventId)) {
             log.warn("Duplicate event detected — skipping | eventId: {} | userId: {} | attempt: {}",
                     eventId, event.getId(), attempt);
+            notificationMetricsService.incrementDuplicate();
             logNotification(event, attempt, "SKIPPED", null);
             return false;
         }
@@ -58,6 +61,7 @@ public class NotificationService {
                     .build());
 
             logNotification(event, attempt, "SENT", null);
+            notificationMetricsService.incrementSent();
 
             log.info("Welcome notification sent successfully | userId: {} | email: {}",
                     event.getId(), event.getEmail());
@@ -67,12 +71,14 @@ public class NotificationService {
             log.warn("Duplicate event detected at DB level — skipping | eventId: {} | userId: {} | attempt: {}",
                     eventId, event.getId(), attempt);
 
+            notificationMetricsService.incrementDuplicate();
             logNotification(event, attempt, "SKIPPED", "Duplicate event detected at DB constraint level");
             return false;
 
         } catch (Exception ex) {
             log.error("Failed to send welcome notification | userId: {} | email: {} | error: {}",
                     event.getId(), event.getEmail(), ex.getMessage());
+            notificationMetricsService.incrementFailed();
             logNotification(event, attempt, "FAILED", ex.getMessage());
             throw ex;
         }

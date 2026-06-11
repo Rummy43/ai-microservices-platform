@@ -3,6 +3,7 @@ package com.ramesh.notification_service.identity;
 import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.notification_service.entity.NotificationLog;
 import com.ramesh.notification_service.kafka.KafkaConsumerService;
+import com.ramesh.notification_service.metrics.NotificationMetricsService;
 import com.ramesh.notification_service.repository.DeadLetterEventRepository;
 import com.ramesh.notification_service.repository.NotificationLogRepository;
 import com.ramesh.notification_service.repository.ProcessedEventRepository;
@@ -10,6 +11,7 @@ import com.ramesh.notification_service.service.NotificationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.kafka.support.KafkaMessageHeaderAccessor;
 
 import java.nio.charset.StandardCharsets;
@@ -35,7 +37,8 @@ class ActorPropagationFlowTest {
     private final DeadLetterEventRepository deadLetterEventRepository = mock(DeadLetterEventRepository.class);
 
     private final NotificationService notificationService =
-            new NotificationService(processedEventRepository, notificationLogRepository);
+            new NotificationService(processedEventRepository, notificationLogRepository,
+                    new NotificationMetricsService(new SimpleMeterRegistry()));
 
     private final KafkaConsumerService consumerService =
             new KafkaConsumerService(notificationService, deadLetterEventRepository);

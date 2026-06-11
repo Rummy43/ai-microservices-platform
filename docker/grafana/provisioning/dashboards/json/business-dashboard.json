@@ -1,0 +1,120 @@
+{
+  "uid": "platform-business",
+  "title": "Platform / Business",
+  "tags": ["platform", "business"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "title": "Users Created (total)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(users_registered_total)", "legendFormat": "users created" }
+      ]
+    },
+    {
+      "title": "User Creation Failures (total)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(users_creation_failed_total)", "legendFormat": "failures" }
+      ]
+    },
+    {
+      "title": "Notifications Sent (total)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(notifications_sent_total)", "legendFormat": "sent" }
+      ]
+    },
+    {
+      "title": "Notification Failures (total)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(notifications_failed_total)", "legendFormat": "failures" }
+      ]
+    },
+    {
+      "title": "User Creation Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(users_registered_total[5m]))", "legendFormat": "created/s" },
+        { "expr": "sum by (reason) (rate(users_creation_failed_total[5m]))", "legendFormat": "failed/s ({{reason}})" }
+      ]
+    },
+    {
+      "title": "Notification Outcomes",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(notifications_sent_total[5m]))", "legendFormat": "sent/s" },
+        { "expr": "sum(rate(notifications_failed_total[5m]))", "legendFormat": "failed/s" },
+        { "expr": "sum(rate(notifications_duplicate_total[5m]))", "legendFormat": "duplicates suppressed/s" }
+      ]
+    },
+    {
+      "title": "Outbox Publishing",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(outbox_published_total[5m]))", "legendFormat": "published/s" },
+        { "expr": "sum(rate(outbox_failed_total[5m]))", "legendFormat": "failed/s" }
+      ]
+    },
+    {
+      "title": "Outbox Backlog",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "outbox_pending", "legendFormat": "pending" },
+        { "expr": "outbox_processing", "legendFormat": "processing" },
+        { "expr": "outbox_failed", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "title": "Outbox Publish Duration",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(outbox_publish_duration_seconds_sum[5m])) / sum(rate(outbox_publish_duration_seconds_count[5m]))", "legendFormat": "avg" },
+        { "expr": "max(outbox_publish_duration_seconds_max)", "legendFormat": "max" }
+      ]
+    },
+    {
+      "title": "End-to-End Funnel (1h totals)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(increase(users_registered_total[1h]))", "legendFormat": "users created" },
+        { "expr": "sum(increase(outbox_published_total[1h]))", "legendFormat": "events published" },
+        { "expr": "sum(increase(notifications_sent_total[1h]))", "legendFormat": "notifications sent" }
+      ]
+    }
+  ]
+}
