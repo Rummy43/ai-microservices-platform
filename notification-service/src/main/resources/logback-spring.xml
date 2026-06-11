@@ -11,12 +11,19 @@
                 <threadName/>
                 <message/>
 
-                <mdc/>
+                <mdc>
+                    <excludeMdcKeyName>trace_id</excludeMdcKeyName>
+                    <excludeMdcKeyName>span_id</excludeMdcKeyName>
+                    <excludeMdcKeyName>trace_flags</excludeMdcKeyName>
+                    <excludeMdcKeyName>traceId</excludeMdcKeyName>
+                </mdc>
 
                 <pattern>
                     <pattern>
                         {
-                        "service": "${appName}"
+                        "service": "${appName}",
+                        "traceId": "%mdc{trace_id}",
+                        "spanId": "%mdc{span_id}"
                         }
                     </pattern>
                 </pattern>
@@ -43,11 +50,18 @@
                 <loggerName/>
                 <threadName/>
                 <message/>
-                <mdc/>
+                <mdc>
+                    <excludeMdcKeyName>trace_id</excludeMdcKeyName>
+                    <excludeMdcKeyName>span_id</excludeMdcKeyName>
+                    <excludeMdcKeyName>trace_flags</excludeMdcKeyName>
+                    <excludeMdcKeyName>traceId</excludeMdcKeyName>
+                </mdc>
                 <pattern>
                     <pattern>
                         {
-                        "service": "${appName}"
+                        "service": "${appName}",
+                        "traceId": "%mdc{trace_id}",
+                        "spanId": "%mdc{span_id}"
                         }
                     </pattern>
                 </pattern>

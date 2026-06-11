@@ -32,7 +32,6 @@ scrape_configs:
 
       - labels:
           level:
-          traceId:
           service_name:
 
   - job_name: notification-service
@@ -58,5 +57,4 @@ scrape_configs:
 
       - labels:
           level:
-          traceId:
           service_name:
