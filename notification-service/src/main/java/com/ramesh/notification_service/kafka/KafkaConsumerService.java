@@ -6,6 +6,7 @@ import com.ramesh.notification_service.common.IdentityHeaders;
 import com.ramesh.notification_service.entity.DeadLetterEvent;
 import com.ramesh.notification_service.identity.IdentityContext;
 import com.ramesh.notification_service.identity.IdentityContextHolder;
+import com.ramesh.notification_service.metrics.NotificationMetricsService;
 import com.ramesh.notification_service.repository.DeadLetterEventRepository;
 import com.ramesh.notification_service.service.NotificationService;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +33,15 @@ public class KafkaConsumerService {
 
     private final NotificationService notificationService;
     private final DeadLetterEventRepository deadLetterEventRepository;
+    private final NotificationMetricsService notificationMetricsService;
 
     @RetryableTopic(
             attempts = "4",
             backOff = @BackOff(delay = 2000, multiplier = 2.0),
-            dltStrategy = DltStrategy.FAIL_ON_ERROR,
+            // ALWAYS_RETRY_ON_ERROR: a failing @DltHandler (e.g. audit DB down)
+            // re-publishes the record to the DLT for another attempt instead of
+            // dropping it — verified to prevent audit-row loss during outages.
+            dltStrategy = DltStrategy.ALWAYS_RETRY_ON_ERROR,
             exclude = {
                     org.springframework.kafka.support.serializer.DeserializationException.class
             }
@@ -145,6 +150,10 @@ public class KafkaConsumerService {
         try {
             log.error("DEAD LETTER — all retries exhausted | eventId: {} | userId: {} | email: {} | topic: {} | actor: {} | error: {}",
                     event.getEventId(), event.getId(), event.getEmail(), topic, actor.username(), errorMessage);
+
+            // Counted before persistence so the signal survives even if the
+            // audit insert itself fails; DLT redeliveries may recount.
+            notificationMetricsService.incrementDlt();
 
             // ✅ Persist to DB for manual reprocessing / ops alerting — including
             // the originating actor so triage retains the audit context.

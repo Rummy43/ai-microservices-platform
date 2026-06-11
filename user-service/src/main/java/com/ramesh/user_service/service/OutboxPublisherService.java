@@ -122,6 +122,7 @@ public class OutboxPublisherService {
                         outboxEvent.getId(), outboxEvent.getEventId(), nextRetryCount);
             } else {
                 outboxEvent.setStatus(OutboxEventStatus.PENDING);
+                metricsService.incrementRetried();
 
                 log.warn("Outbox event publish failed, will retry | outboxId: {} | eventId: {} | retryCount: {} | error: {}",
                         outboxEvent.getId(), outboxEvent.getEventId(), nextRetryCount, ex.getMessage());

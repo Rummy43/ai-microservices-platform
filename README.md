@@ -677,6 +677,99 @@ curl -X POST localhost:8082/api/v1/users -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+## 🛡 Resilience & Reliability
+
+The platform degrades gracefully and recovers automatically under three failure classes: **downstream service outages** (circuit breakers + fallbacks), **traffic surges** (edge rate limiting), and **message-processing failures** (layered retries ending in a dead letter topic). Every protection emits metrics into the existing Prometheus/Grafana stack.
+
+### Resilience Architecture
+
+```text
+                 Client
+                   │
+                   ▼
+        ┌─────────────────────────────┐
+        │   API Gateway               │
+        │   ① RateLimitFilter (429)   │  Resilience4j RateLimiter — 20 req/s,
+        │   ② JWT validation          │  runs BEFORE security: floods are shed
+        │   ③ CircuitBreaker filter   │  userServiceCB / notificationServiceCB
+        │      └─ fallback → 503      │  fail-fast + Retry-After when open
+        │   ④ Retry filter (GET 5xx)  │  idempotent reads only
+        └──────────┬──────────────────┘
+                   ▼
+        user-service ──► outbox table ──► scheduled publisher
+                                          ⑤ transient failure → PENDING again
+                                            (outbox_retried_total, max 5 → FAILED)
+                                          │
+                                          ▼ Kafka
+        notification-service  ⑥ @RetryableTopic: retry-2000 → retry-4000 → retry-8000
+                              ⑦ exhausted → DLT → @DltHandler
+                                 (notifications_dlt_total + dead_letter_events row
+                                  with full actor/audit context)
+```
+
+### Protection Layers
+
+| Layer | Mechanism | Configuration | Failure Behavior |
+|-------|-----------|---------------|------------------|
+| Gateway → downstream | Resilience4j circuit breakers (`userServiceCB`, `notificationServiceCB`) | 10-call sliding window, opens at 50% failures (min 5 calls), 10s open, auto half-open with 3 probes, 5s time limit | Fast 503 JSON fallback with `Retry-After`; open breaker rejects without network calls |
+| Public API edge | Resilience4j rate limiter (`public-api`) | 20 req/s, zero wait | 429 + `Retry-After: 1`; runs before JWT validation so floods don't burn crypto cycles; actuator exempt so probes/scrapes never throttle |
+| Gateway reads | Route `Retry` filter | 3 attempts, `SERVER_ERROR` series, **GET only** | Transparent retry of idempotent reads; writes are never retried at the edge (outbox owns write reliability) |
+| Outbox publishing | Persistent state-machine retry | Max 5 attempts, then `FAILED` | Event returns to `PENDING` (`outbox_retried_total`); broker outages never lose events |
+| Kafka consumption | `@RetryableTopic` non-blocking retries | 4 attempts, 2s/4s/8s exponential backoff | Main topic stays unblocked while failures replay on retry topics |
+| Poison messages | `@DltHandler` + `dead_letter_events` | `ALWAYS_RETRY_ON_ERROR` — a failing DLT handler re-publishes the record to the DLT until the audit insert succeeds | `notifications_dlt_total` + durable row with actor context for replay/triage |
+| Probes | Actuator health groups | `/actuator/health/liveness`, `/actuator/health/readiness` on all services | Kubernetes-ready; readiness intentionally excludes external deps (Spring default) to avoid cascading restarts |
+
+### Resilience Metrics
+
+| Metric | Source | Meaning |
+|--------|--------|---------|
+| `resilience4j_circuitbreaker_state{state}` | gateway | 1 on the active state (closed/open/half_open) per breaker |
+| `resilience4j_circuitbreaker_calls_seconds_count{kind}` | gateway | Calls by outcome (successful/failed/ignored) |
+| `resilience4j_circuitbreaker_not_permitted_calls_total` | gateway | Requests rejected while the breaker was open |
+| `resilience4j_ratelimiter_available_permissions` | gateway | Remaining tokens in the current 1s window |
+| `outbox_retried_total` | user-service | Transient publish failures sent back to `PENDING` |
+| `spring_kafka_listener_seconds_count{name=~".*retry.*"}` | notification-service | Per-retry-topic delivery attempts |
+| `notifications_dlt_total` | notification-service | Events that exhausted all retries |
+| `notifications_failed_total` / `outbox_failed_total` | both | Permanent failures by layer |
+
+All of the above are visualized on the provisioned **Platform / Resilience** dashboard (`docker/grafana/provisioning/dashboards/json/resilience-dashboard.json`).
+
+![Resilience Dashboard](docs/dashboards/resilience-dashboard.png)
+
+### Demonstrated Failure Scenarios
+
+All three scenarios were executed against the running platform and verified through Prometheus:
+
+**1. Notification service unavailable (circuit breaker):** with notification-service stopped, 10 authenticated calls through the gateway all received the fast 503 fallback — the first 4 failures tripped the breaker, the remaining 6 were rejected without a network attempt (`not_permitted_calls_total = 6`, `state{open} = 1`). After restart, the breaker half-opened in 10s, probe calls succeeded, and it closed automatically.
+
+**2. Kafka consumer failure → retry topics → DLT:** with the notification database taken offline, a published event failed on the main topic, replayed across `retry-2000` → `retry-4000` → `retry-8000` (visible per-topic in listener metrics), then landed in the DLT (`notifications_dlt_total = 1`).
+
+**3. Database transient failure (self-healing — and a real bug found):** the first run of this scenario exposed a genuine gap: under the original `DltStrategy.FAIL_ON_ERROR`, a DLT handler failing against a downed database was **not retried** — Spring Kafka logged *"won't be retried. No further action will be taken with this record"* and the audit row was permanently lost. The strategy was switched to `ALWAYS_RETRY_ON_ERROR` and the scenario re-run: the failed DLT record was re-published to the DLT, and once the database returned, the `dead_letter_events` audit row (with actor context) persisted automatically — no message loss, no manual intervention. The `notifications_dlt_total` metric is deliberately incremented *before* the audit insert so the alerting signal survives even while persistence is failing.
+
+### Verifying the Setup
+
+```bash
+# Probes (all services)
+curl localhost:8080/actuator/health/readiness
+curl localhost:8082/actuator/health/liveness
+
+# Circuit breaker state + rate limiter
+curl -s localhost:8082/actuator/prometheus | grep resilience4j_circuitbreaker_state
+curl -s localhost:8082/actuator/prometheus | grep resilience4j_ratelimiter
+
+# Trip the rate limiter (40 rapid requests → mix of passed + 429)
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8082/api/v1/users?burst=[1-40]" | sort | uniq -c
+
+# DLT / retry counters
+curl -s localhost:8081/actuator/prometheus | grep -E "notifications_dlt_total|notifications_failed_total"
+curl -s localhost:8080/actuator/prometheus | grep outbox_retried_total
+
+# Verified in Prometheus
+curl -s 'localhost:9090/api/v1/query?query=resilience4j_circuitbreaker_state{state="open"}'
+```
+
+---
+
 ## 🚀 Running Locally
 
 ### 1. Start Infrastructure
@@ -742,6 +835,13 @@ cd notification-service && ./gradlew bootRun
 - ✅ Five provisioned Grafana dashboards (JVM, HTTP, Kafka, Database, Business) as version-controlled JSON
 - ✅ Business KPI instrumentation: users registered/failed, notifications sent/failed/duplicate
 - ✅ End-to-end business funnel panel (users → outbox → notifications)
+- ✅ Resilience4j circuit breakers on gateway routes with fast-fail 503 fallbacks
+- ✅ Edge rate limiting (20 req/s) ahead of JWT validation, with 429 + Retry-After
+- ✅ Gateway retry filter for idempotent GET reads
+- ✅ Outbox transient-retry visibility (`outbox_retried_total`)
+- ✅ DLT activity metric (`notifications_dlt_total`) and Platform / Resilience dashboard
+- ✅ Liveness/readiness probes verified on all services
+- ✅ Failure scenarios demonstrated: downstream outage (CB), consumer failure → retry topics → DLT, DB transient failure with self-healing recovery
 - 🚧 Asynchronous `user-service → notification-service` service-map edge and consumer/scheduler-thread trace context (pending Kafka span instrumentation / OTel agent upgrade)
 
 ---

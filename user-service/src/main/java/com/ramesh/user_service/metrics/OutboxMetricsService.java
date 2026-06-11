@@ -15,6 +15,7 @@ public class OutboxMetricsService {
 
     private final Counter publishedCounter;
     private final Counter failedCounter;
+    private final Counter retriedCounter;
     private final Timer publishDurationTimer;
 
     public OutboxMetricsService(
@@ -53,6 +54,10 @@ public class OutboxMetricsService {
                 .description("Total permanently failed outbox events")
                 .register(meterRegistry);
 
+        this.retriedCounter = Counter.builder("outbox_retried_total")
+                .description("Total transient outbox publish failures scheduled for retry")
+                .register(meterRegistry);
+
         this.publishDurationTimer = Timer.builder("outbox_publish_duration")
                 .description("Outbox publish duration")
                 .register(meterRegistry);
@@ -64,6 +69,10 @@ public class OutboxMetricsService {
 
     public void incrementFailed() {
         failedCounter.increment();
+    }
+
+    public void incrementRetried() {
+        retriedCounter.increment();
     }
 
     public <T> T recordPublishDuration(Supplier<T> supplier) {

@@ -1,0 +1,127 @@
+{
+  "uid": "platform-resilience",
+  "title": "Platform / Resilience",
+  "tags": ["platform", "resilience"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "title": "Circuit Breaker State (1 = active state)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "max": 1 }, "overrides": [] },
+      "targets": [
+        { "expr": "resilience4j_circuitbreaker_state{state=\"open\"}", "legendFormat": "{{name}} OPEN" },
+        { "expr": "resilience4j_circuitbreaker_state{state=\"half_open\"}", "legendFormat": "{{name}} HALF-OPEN" }
+      ]
+    },
+    {
+      "title": "Circuit Breaker Calls by Outcome",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (name, kind) (rate(resilience4j_circuitbreaker_calls_seconds_count[5m]))", "legendFormat": "{{name}} {{kind}}" },
+        { "expr": "sum by (name) (rate(resilience4j_circuitbreaker_not_permitted_calls_total[5m]))", "legendFormat": "{{name}} rejected (open)" }
+      ]
+    },
+    {
+      "title": "Circuit Breaker Failure Rate (%)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": -1 }, "overrides": [] },
+      "targets": [
+        { "expr": "resilience4j_circuitbreaker_failure_rate", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "title": "Rate Limiter (public-api)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "resilience4j_ratelimiter_available_permissions{name=\"public-api\"}", "legendFormat": "available permissions" },
+        { "expr": "resilience4j_ratelimiter_waiting_threads{name=\"public-api\"}", "legendFormat": "waiting threads" }
+      ]
+    },
+    {
+      "title": "Kafka Retry-Topic Deliveries (msg/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (name, result) (rate(spring_kafka_listener_seconds_count{name=~\".*retry.*\"}[5m]))", "legendFormat": "{{name}} ({{result}})" }
+      ]
+    },
+    {
+      "title": "Outbox Retries & Permanent Failures",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(outbox_retried_total[5m]))", "legendFormat": "transient retries/s" },
+        { "expr": "sum(rate(outbox_failed_total[5m]))", "legendFormat": "permanent failures/s" }
+      ]
+    },
+    {
+      "title": "Dead Letter Topic Messages (total)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(notifications_dlt_total)", "legendFormat": "DLT messages" }
+      ]
+    },
+    {
+      "title": "DLT Arrival Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(notifications_dlt_total[5m]))", "legendFormat": "DLT/s" }
+      ]
+    },
+    {
+      "title": "Failed Message Rate (all layers)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(notifications_failed_total[5m]))", "legendFormat": "notification failures/s" },
+        { "expr": "sum(rate(outbox_failed_total[5m]))", "legendFormat": "outbox permanent failures/s" },
+        { "expr": "sum by (reason) (rate(users_creation_failed_total[5m]))", "legendFormat": "user creation failures/s ({{reason}})" }
+      ]
+    },
+    {
+      "title": "HTTP 5xx Failure Ratio by Service",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (job) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / sum by (job) (rate(http_server_requests_seconds_count[5m]))", "legendFormat": "{{job}}" }
+      ]
+    },
+    {
+      "title": "Gateway Throttled Requests (429)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{job=\"api-gateway\", status=\"429\"}[5m]))", "legendFormat": "throttled/s" }
+      ]
+    }
+  ]
+}

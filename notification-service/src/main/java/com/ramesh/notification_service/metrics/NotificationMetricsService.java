@@ -10,6 +10,7 @@ public class NotificationMetricsService {
     private final Counter sentCounter;
     private final Counter failedCounter;
     private final Counter duplicateCounter;
+    private final Counter dltCounter;
 
     public NotificationMetricsService(MeterRegistry meterRegistry) {
 
@@ -24,6 +25,10 @@ public class NotificationMetricsService {
         this.duplicateCounter = Counter.builder("notifications_duplicate_total")
                 .description("Total duplicate events suppressed by the idempotent consumer")
                 .register(meterRegistry);
+
+        this.dltCounter = Counter.builder("notifications_dlt_total")
+                .description("Total events routed to the dead letter topic after exhausting retries")
+                .register(meterRegistry);
     }
 
     public void incrementSent() {
@@ -36,5 +41,9 @@ public class NotificationMetricsService {
 
     public void incrementDuplicate() {
         duplicateCounter.increment();
+    }
+
+    public void incrementDlt() {
+        dltCounter.increment();
     }
 }

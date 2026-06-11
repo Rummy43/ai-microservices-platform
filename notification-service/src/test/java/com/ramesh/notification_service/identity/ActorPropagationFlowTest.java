@@ -36,12 +36,14 @@ class ActorPropagationFlowTest {
     private final NotificationLogRepository notificationLogRepository = mock(NotificationLogRepository.class);
     private final DeadLetterEventRepository deadLetterEventRepository = mock(DeadLetterEventRepository.class);
 
+    private final NotificationMetricsService metricsService =
+            new NotificationMetricsService(new SimpleMeterRegistry());
+
     private final NotificationService notificationService =
-            new NotificationService(processedEventRepository, notificationLogRepository,
-                    new NotificationMetricsService(new SimpleMeterRegistry()));
+            new NotificationService(processedEventRepository, notificationLogRepository, metricsService);
 
     private final KafkaConsumerService consumerService =
-            new KafkaConsumerService(notificationService, deadLetterEventRepository);
+            new KafkaConsumerService(notificationService, deadLetterEventRepository, metricsService);
 
     @AfterEach
     void tearDown() {
