@@ -1,0 +1,98 @@
+# SLO alert rules.
+# Availability uses MULTI-WINDOW BURN-RATE (Google SRE) — page on error-BUDGET
+# consumption trajectory, not on a single bad scrape. A short window confirms the
+# burn is happening *now*; the long window confirms it's not a one-off blip.
+#
+# Provisional SLO: availability 99.9% (budget = 0.001). Burn-rate multipliers:
+#   fast  = 14.4x  → ~2% of 28d budget in 1h   → threshold 0.0144   (page)
+#   slow  =  6x    → ~5% of 28d budget in 6h    → threshold 0.006    (ticket)
+# Targets are PROVISIONAL until baselined (docs/slo/sli-slo-catalog.md §5) — thresholds
+# derive directly from the SLO, so they move when the SLO is finalized.
+groups:
+  - name: slo_availability_burn_rate
+    rules:
+      - alert: AvailabilityFastBurn
+        expr: |
+          job:http_error_ratio:rate1h > 0.0144
+          and
+          job:http_error_ratio:rate5m > 0.0144
+        for: 2m
+        labels:
+          severity: page
+          slo: availability
+        annotations:
+          summary: "Fast error-budget burn on {{ $labels.job }}"
+          description: "5xx ratio > 14.4x the 99.9% budget over both 5m and 1h — ~2% of the 28d budget in an hour."
+          runbook: "docs/runbooks/availability-burn.md"
+
+      - alert: AvailabilitySlowBurn
+        expr: |
+          job:http_error_ratio:rate6h > 0.006
+          and
+          job:http_error_ratio:rate30m > 0.006
+        for: 15m
+        labels:
+          severity: ticket
+          slo: availability
+        annotations:
+          summary: "Slow error-budget burn on {{ $labels.job }}"
+          description: "5xx ratio > 6x the 99.9% budget over both 30m and 6h — budget will exhaust well before the window closes."
+          runbook: "docs/runbooks/availability-burn.md"
+
+  # Async pipeline: freshness/correctness SLIs are gauge-threshold, not budget-based.
+  - name: slo_pipeline_freshness
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: max by (job) (kafka_consumer_fetch_manager_records_lag_max{job="notification-service"}) > 1000
+        for: 10m
+        labels:
+          severity: ticket
+          slo: consumer_lag
+        annotations:
+          summary: "notification-service consumer lag > 1000 for 10m"
+          description: "Consumer is falling behind the topic; notifications are getting stale. Current: {{ $value | humanize }} records."
+          runbook: "docs/runbooks/consumer-lag.md"
+
+      - alert: OutboxBacklogAgeHigh
+        expr: outbox_oldest_pending_age_seconds > 60
+        for: 5m
+        labels:
+          severity: ticket
+          slo: outbox_freshness
+        annotations:
+          summary: "Oldest unpublished outbox event > 60s for 5m"
+          description: "The outbox publisher is not draining PENDING rows promptly (slow-drain). Oldest: {{ $value | humanizeDuration }}."
+          runbook: "docs/runbooks/outbox-backlog.md"
+
+      - alert: OutboxBacklogDepthHigh
+        expr: outbox_pending > 50
+        for: 10m
+        labels:
+          severity: ticket
+          slo: outbox_freshness
+        annotations:
+          summary: "Outbox PENDING depth > 50 for 10m"
+          description: "Pending outbox events accumulating: {{ $value }}. Publisher throughput may be below ingest rate."
+          runbook: "docs/runbooks/outbox-backlog.md"
+
+      - alert: DltDepthHigh
+        expr: dlt_unreprocessed > 10
+        for: 15m
+        labels:
+          severity: ticket
+          slo: dlt_depth
+        annotations:
+          summary: "Unreprocessed dead-letters > 10 for 15m"
+          description: "The self-healing reprocessor is not draining the DLT: {{ $value }} events outstanding."
+          runbook: "docs/runbooks/dlt-depth.md"
+
+      - alert: DltInflux
+        expr: sum(rate(notifications_dlt_total[5m])) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          slo: dlt_influx
+        annotations:
+          summary: "Events are being dead-lettered (sustained)"
+          description: "Poison/failing events routed to the DLT over the last 10m — a systematic processing failure, not a transient blip."
+          runbook: "docs/runbooks/dlt-depth.md"
