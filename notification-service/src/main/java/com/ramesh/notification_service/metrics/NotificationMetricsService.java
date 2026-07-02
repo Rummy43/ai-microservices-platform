@@ -13,6 +13,8 @@ public class NotificationMetricsService {
     private final Counter failedCounter;
     private final Counter duplicateCounter;
     private final Counter dltCounter;
+    private final Counter dltReprocessedCounter;
+    private final Counter dltReprocessFailedCounter;
 
     public NotificationMetricsService(MeterRegistry meterRegistry,
                                       DeadLetterEventRepository deadLetterEventRepository) {
@@ -39,6 +41,14 @@ public class NotificationMetricsService {
         this.dltCounter = Counter.builder("notifications_dlt_total")
                 .description("Total events routed to the dead letter topic after exhausting retries")
                 .register(meterRegistry);
+
+        this.dltReprocessedCounter = Counter.builder("notifications_dlt_reprocessed_total")
+                .description("Total dead-letter events successfully drained by the self-healing reprocessor")
+                .register(meterRegistry);
+
+        this.dltReprocessFailedCounter = Counter.builder("notifications_dlt_reprocess_failed_total")
+                .description("Total dead-letter reprocess attempts that failed (feeds the poison-message cap)")
+                .register(meterRegistry);
     }
 
     public void incrementSent() {
@@ -55,5 +65,13 @@ public class NotificationMetricsService {
 
     public void incrementDlt() {
         dltCounter.increment();
+    }
+
+    public void incrementDltReprocessed() {
+        dltReprocessedCounter.increment();
+    }
+
+    public void incrementDltReprocessFailed() {
+        dltReprocessFailedCounter.increment();
     }
 }

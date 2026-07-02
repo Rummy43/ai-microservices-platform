@@ -28,8 +28,12 @@ FROM dead_letter_events WHERE reprocessed = false ORDER BY failed_at DESC LIMIT 
 ## Verify recovery
 `rate(notifications_dlt_total[5m])` → 0 and `dlt_unreprocessed` → below threshold.
 
-## Note (current state)
-As of 2026-07-01 there are ~32 unreprocessed dead-letters from prior fault-injection testing — `DltDepthHigh` firing is *correct* until they're drained or cleared.
+## Self-healing reprocessor
+`DltReprocessorService` (`@Scheduled`) replays unreprocessed rows through the idempotent
+notification path with exponential backoff and a poison-message cap (5 attempts), marking
+each `reprocessed=true` on success. `DltDepthHigh` should self-resolve as it drains; if depth
+stays high, check `notifications_dlt_reprocess_failed_total` (rising ⇒ events hitting the
+poison cap — inspect `last_error` and fix the root cause).
 
 ## Escalate
 Influx continues after the suspected cause is fixed → owner.

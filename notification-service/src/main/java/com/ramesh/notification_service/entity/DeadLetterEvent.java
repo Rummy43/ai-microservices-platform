@@ -42,6 +42,14 @@ public class DeadLetterEvent {
     @Column(name = "reprocessed_at")
     private LocalDateTime reprocessedAt;
 
+    // ---- Self-healing reprocessor bookkeeping (poison cap + backoff) ----
+
+    @Column(name = "reprocess_attempts", nullable = false)
+    private int reprocessAttempts;
+
+    @Column(name = "last_reprocess_attempt_at")
+    private LocalDateTime lastReprocessAttemptAt;
+
     // ---- Propagated identity / audit context of the originating request ----
 
     @Column(name = "actor_username")
