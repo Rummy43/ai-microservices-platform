@@ -1,6 +1,8 @@
 package com.ramesh.notification_service.metrics;
 
+import com.ramesh.notification_service.repository.DeadLetterEventRepository;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 
@@ -12,7 +14,15 @@ public class NotificationMetricsService {
     private final Counter duplicateCounter;
     private final Counter dltCounter;
 
-    public NotificationMetricsService(MeterRegistry meterRegistry) {
+    public NotificationMetricsService(MeterRegistry meterRegistry,
+                                      DeadLetterEventRepository deadLetterEventRepository) {
+
+        // Live DLT depth (SLI #11) — dead-letters still awaiting the self-healing
+        // reprocessor. A gauge, not a counter: it can go down as the reprocessor drains.
+        Gauge.builder("dlt.unreprocessed", deadLetterEventRepository,
+                        DeadLetterEventRepository::countByReprocessedFalse)
+                .description("Dead-letter events awaiting the self-healing reprocessor")
+                .register(meterRegistry);
 
         this.sentCounter = Counter.builder("notifications_sent_total")
                 .description("Total successfully sent notifications")

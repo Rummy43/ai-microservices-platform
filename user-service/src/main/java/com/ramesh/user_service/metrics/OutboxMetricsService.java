@@ -8,6 +8,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.function.Supplier;
 
 @Service
@@ -44,6 +46,18 @@ public class OutboxMetricsService {
                         r -> r.countByStatus(OutboxEventStatus.FAILED)
                 )
                 .description("Current number of failed outbox events")
+                .register(meterRegistry);
+
+        // Backlog AGE, not just count (SLI #7): a small number of events stuck for a
+        // long time is a slow-drain failure that a pending-count gauge alone misses.
+        Gauge.builder(
+                        "outbox.oldest.pending.age.seconds",
+                        repository,
+                        r -> r.findOldestCreatedAtByStatus(OutboxEventStatus.PENDING)
+                                .map(oldest -> (double) Duration.between(oldest, LocalDateTime.now()).getSeconds())
+                                .orElse(0d)
+                )
+                .description("Age in seconds of the oldest unpublished (PENDING) outbox event")
                 .register(meterRegistry);
 
         this.publishedCounter = Counter.builder("outbox_published_total")

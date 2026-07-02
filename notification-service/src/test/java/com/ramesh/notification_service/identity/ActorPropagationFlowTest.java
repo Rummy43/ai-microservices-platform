@@ -37,7 +37,7 @@ class ActorPropagationFlowTest {
     private final DeadLetterEventRepository deadLetterEventRepository = mock(DeadLetterEventRepository.class);
 
     private final NotificationMetricsService metricsService =
-            new NotificationMetricsService(new SimpleMeterRegistry());
+            new NotificationMetricsService(new SimpleMeterRegistry(), deadLetterEventRepository);
 
     private final NotificationService notificationService =
             new NotificationService(processedEventRepository, notificationLogRepository, metricsService);
