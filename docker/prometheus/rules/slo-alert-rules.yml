@@ -42,6 +42,12 @@ groups:
   # Async pipeline: freshness/correctness SLIs are gauge-threshold, not budget-based.
   - name: slo_pipeline_freshness
     rules:
+      # LIMITATION (verified by failure injection 2026-07-08): this client-side metric
+      # only reports while the consumer is actively fetching. A paused/stalled/dead
+      # consumer decays to NaN and `NaN > 1000` is always false — so this alert catches
+      # a SLOW consumer, never a STOPPED one. The stopped case is covered by
+      # PipelineConsumptionStalled below (both-sides counters, absent-safe) and
+      # TargetDown. Broker-side lag (kafka-exporter) planned for Phase 8.
       - alert: KafkaConsumerLagHigh
         expr: max by (job) (kafka_consumer_fetch_manager_records_lag_max{job="notification-service"}) > 1000
         for: 10m
@@ -52,6 +58,42 @@ groups:
           summary: "notification-service consumer lag > 1000 for 10m"
           description: "Consumer is falling behind the topic; notifications are getting stale. Current: {{ $value | humanize }} records."
           runbook: "docs/runbooks/consumer-lag.md"
+
+      # Catches the case KafkaConsumerLagHigh structurally cannot: producer is publishing
+      # but the consumer is processing NOTHING. `unless` fires when the right-hand side is
+      # empty OR zero — so it detects a paused listener, a wedged JVM, and a dead process
+      # (whose counters vanish from scrape) alike. Found via failure injection 2026-07-08:
+      # 3,600+ real broker lag, client lag metric = NaN, zero alerts.
+      - alert: PipelineConsumptionStalled
+        expr: |
+          sum(rate(outbox_published_total[10m])) > 0.05
+          unless
+          (
+            sum(rate(notifications_sent_total[10m]))
+            + sum(rate(notifications_duplicate_total[10m]))
+            + sum(rate(notifications_failed_total[10m]))
+          ) > 0
+        for: 5m
+        labels:
+          severity: page
+          slo: pipeline_flow
+        annotations:
+          summary: "Events are being published but nothing is being consumed"
+          description: "outbox_published_total is advancing while all consumer-side processing counters are flat or absent — the async pipeline is stalled end-to-end."
+          runbook: "docs/runbooks/pipeline-stall.md"
+
+      # A dead scrape target silences ALL of its metrics — every gauge/counter-based
+      # alert for that service goes blind simultaneously. This is the backstop.
+      - alert: TargetDown
+        expr: up == 0
+        for: 3m
+        labels:
+          severity: page
+          slo: scrape_liveness
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "{{ $labels.job }} ({{ $labels.instance }}) has failed scrapes for 3m. All metric-based alerting for this service is blind until it returns."
+          runbook: "docs/runbooks/pipeline-stall.md"
 
       - alert: OutboxBacklogAgeHigh
         expr: outbox_oldest_pending_age_seconds > 60
