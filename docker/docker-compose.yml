@@ -105,5 +105,11 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      # Realm as code: start-dev keeps state in the container FS, so any recreate
+      # wipes the hand-built realm (bit us 2026-07-17). --import-realm only imports
+      # when the realm does not already exist — safe on every start.
+      - ./keycloak:/opt/keycloak/data/import:ro
     command:
       - start-dev
+      - --import-realm
