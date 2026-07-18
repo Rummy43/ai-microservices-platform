@@ -15,10 +15,10 @@
 
 | # | Service | SLI | PromQL (good / valid) | Backing metric | Exists? | Provisional SLO |
 |---|---|---|---|---|---|---|
-| 1 | api-gateway | **Availability** — served without a server error | `sum(rate(http_server_requests_seconds_count{job="api-gateway",uri!~"/actuator.*",status!~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{job="api-gateway",uri!~"/actuator.*"}[5m]))` | `http_server_requests_seconds_count` | ✅ | ⚠ **99.9%** / 28d |
-| 2 | api-gateway | **Latency** — fraction of requests ≤ 300 ms | `sum(rate(http_server_requests_seconds_bucket{job="api-gateway",uri!~"/actuator.*",le="0.3"}[5m])) / sum(rate(http_server_requests_seconds_count{job="api-gateway",uri!~"/actuator.*"}[5m]))` | `http_server_requests_seconds_bucket` | ✅ live-verified 2026-07-01 (buckets present; SLI awaits gateway JWT traffic) | ⚠ **99%** ≤ 300 ms |
-| 3 | user-service | **Availability** (same shape, `job="user-service"`) | as #1 with `job="user-service"` | `http_server_requests_seconds_count` | ✅ | ⚠ **99.9%** / 28d |
-| 4 | user-service | **Latency** ≤ 300 ms (same shape as #2) | as #2 with `job="user-service"` | `http_server_requests_seconds_bucket` | ✅ buckets enabled 2026-07-01 (§4.1) | ⚠ **99%** ≤ 300 ms |
+| 1 | api-gateway | **Availability** — served without a server error | `sum(rate(http_server_requests_seconds_count{job="api-gateway",uri!~"/actuator.*",status!~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{job="api-gateway",uri!~"/actuator.*"}[5m]))` | `http_server_requests_seconds_count` | ✅ | ✅ **99.9%** / 28d (baselined 2026-07-17: measured 1.0 under load) |
+| 2 | api-gateway | **Latency** — fraction of requests ≤ 300 ms | `sum(rate(http_server_requests_seconds_bucket{job="api-gateway",uri!~"/actuator.*",le="0.3"}[5m])) / sum(rate(http_server_requests_seconds_count{job="api-gateway",uri!~"/actuator.*"}[5m]))` | `http_server_requests_seconds_bucket` | ✅ | ✅ **99%** ≤ 300 ms (baselined 2026-07-17: 99.9% ≤ 300 ms, p99 186 ms @ 14 req/s) |
+| 3 | user-service | **Availability** (same shape, `job="user-service"`) | as #1 with `job="user-service"` | `http_server_requests_seconds_count` | ✅ | ✅ **99.9%** / 28d (baselined 2026-07-17: measured 1.0 under load) |
+| 4 | user-service | **Latency** ≤ 300 ms (same shape as #2) | as #2 with `job="user-service"` | `http_server_requests_seconds_bucket` | ✅ buckets enabled 2026-07-01 (§4.1) | ✅ **99%** ≤ 300 ms (baselined 2026-07-17: 99.9% ≤ 300 ms, p99 177 ms @ 14 req/s) |
 
 > `notification-service` is consumer-driven, not request-driven — its user-facing quality lives in the pipeline SLIs below, not in an HTTP ratio.
 
@@ -26,13 +26,14 @@
 
 | # | Component | SLI | PromQL | Backing metric | Exists? | Provisional SLO |
 |---|---|---|---|---|---|---|
-| 5 | Outbox publisher | **Publish success ratio** — events published vs permanently failed | `sum(rate(outbox_published_total[5m])) / (sum(rate(outbox_published_total[5m])) + sum(rate(outbox_failed_total[5m])))` | `outbox_published_total`, `outbox_failed_total` | ✅ | ⚠ **99.9%** / 28d |
-| 6 | Outbox publisher | **Backlog depth** — pending events not yet published | `outbox_pending` | `outbox_pending` (gauge) | ✅ | ⚠ **< 50** for 99% of the window |
-| 7 | Outbox publisher | **Backlog age** — age of the oldest unpublished event | `outbox_oldest_pending_age_seconds` | `outbox_oldest_pending_age_seconds` (gauge) | ✅ added 2026-07-01 (§4.3) | ⚠ **p95 < 60 s** |
-| 8 | notification consumer | **Processing success ratio** — delivered vs failed | `sum(rate(notifications_sent_total[5m])) / (sum(rate(notifications_sent_total[5m])) + sum(rate(notifications_failed_total[5m])))` | `notifications_sent_total`, `notifications_failed_total` | ✅ | ⚠ **99%** / 28d |
-| 9 | notification consumer | **Consumer lag (freshness)** — how far behind the topic | `max by (job)(kafka_consumer_fetch_manager_records_lag_max{job="notification-service"})` | `kafka_consumer_fetch_manager_records_lag_max` | ✅ | ⚠ **p95 lag < 1000** records |
-| 10 | Dead Letter Topic | **Poison influx** — new dead-letters per window | `sum(rate(notifications_dlt_total[5m]))` | `notifications_dlt_total` | ✅ | ⚠ **≈ 0** (alert on any sustained > 0) |
-| 11 | Dead Letter Topic | **DLT depth** — unreprocessed dead-letters outstanding | `dlt_unreprocessed` | `dlt_unreprocessed` (gauge) | ✅ added 2026-07-01 (§4.2) | ⚠ **< 10** |
+| 5 | Outbox publisher | **Publish success ratio** — events published vs permanently failed | `sum(rate(outbox_published_total[5m])) / (sum(rate(outbox_published_total[5m])) + sum(rate(outbox_failed_total[5m])))` | `outbox_published_total`, `outbox_failed_total` | ✅ | ✅ **99.9%** / 28d (baselined: 0 failures in 1,000-event run; see #12 for the terminal-state guard) |
+| 6 | Outbox publisher | **Backlog depth** — pending events not yet published | `outbox_pending` | `outbox_pending` (gauge) | ✅ | ✅ **< 50** for 99% of the window (steady-state ≈ 0; bursts governed by the 4 ev/s publisher ceiling — see §7) |
+| 7 | Outbox publisher | **Backlog age** — age of the oldest unpublished event | `outbox_oldest_pending_age_seconds` | `outbox_oldest_pending_age_seconds` (gauge) | ✅ added 2026-07-01 (§4.3) | ✅ **p95 < 60 s** (steady-state ≈ 0 s; sustained age > 60 s means ingest > publisher ceiling — capacity signal, not noise) |
+| 8 | notification consumer | **Processing success ratio** — delivered vs failed | `sum(rate(notifications_sent_total[5m])) / (sum(rate(notifications_sent_total[5m])) + sum(rate(notifications_failed_total[5m])))` | `notifications_sent_total`, `notifications_failed_total` | ✅ | ✅ **99%** / 28d (baselined: 100% across 1,000 events) |
+| 9 | notification consumer | **Consumer lag (freshness)** — how far behind the topic | `max by (job)(kafka_consumer_fetch_manager_records_lag_max{job="notification-service"})` | `kafka_consumer_fetch_manager_records_lag_max` | ✅ | ✅ **p95 lag < 1000** records (baselined: lag ~0 under load, drain ~150 ev/s; STOPPED-consumer case covered by `PipelineConsumptionStalled`, not this SLI — ADR-017) |
+| 10 | Dead Letter Topic | **Poison influx** — new dead-letters per window | `sum(rate(notifications_dlt_total[5m]))` | `notifications_dlt_total` | ✅ | ✅ **≈ 0** (alert on any sustained > 0) |
+| 11 | Dead Letter Topic | **DLT depth** — unreprocessed dead-letters outstanding | `dlt_unreprocessed` | `dlt_unreprocessed` (gauge) | ✅ added 2026-07-01 (§4.2) | ✅ **< 10** (steady-state = 1: a deliberately quarantined poison event, correct by design) |
+| 12 | Outbox publisher | **Terminal-failure integrity** — rows that exhausted publish retries | `outbox_failed` | `outbox_failed` (gauge) | ✅ (added 2026-07-17 after the silent-loss finding) | ✅ **= 0** — any FAILED row is silent event loss; pages via `OutboxPublishTerminalFailure` |
 
 > #10 vs #11 is deliberate: `notifications_dlt_total` is a *cumulative counter* (good for "how fast are we poisoning"), not a live queue depth. "How many dead-letters are waiting for the self-healing reprocessor right now" needs a gauge over `dead_letter_events` — currently absent.
 
@@ -93,5 +94,22 @@ Backlog *count* (#6) catches "a lot stuck"; backlog *age* (#7) catches "a little
 ## 6. Error-budget framing (feeds the burn-rate alerts)
 For a ratio SLO of `X%` over 28d, the error budget is `(100 − X)%` of valid events. Example: gateway availability 99.9% ⇒ 0.1% budget ⇒ ~43 min/28d of "all requests failing" equivalent. Burn-rate alerts fire on *fast* consumption of that budget (e.g., 2% in 1h) rather than on a raw threshold — page on trajectory, not on a single bad scrape.
 
+## 7. Baseline evidence (2026-07-17) — targets finalized
+
+Concentrated load window per §5: **1,000 JWT-authenticated `POST /api/v1/users` through the gateway in 70 s (~14.3 req/s sustained), 1000/1000 → 201, zero 5xx, zero 429s** (under the 20 req/s perimeter rate limit). Combined with the 07-08 injection-run data (3,600-event drain).
+
+| Measurement | Value |
+|---|---|
+| Availability SLI (gateway / user-service) | **1.0 / 1.0** |
+| Latency SLI ≤ 300 ms (gateway / user-service) | **0.9990 / 0.9990** |
+| p99 (gateway / user-service) | **186 ms / 177 ms** |
+| p95 (gateway / user-service) | **78 ms / 60 ms** |
+| Outbox peak backlog (depth / oldest age) | **720 rows / 191 s** — burst ingest 14 ev/s vs publisher ceiling |
+| Outbox publisher effective throughput | **~4 ev/s** = exactly the configured ceiling (`@Scheduled(fixedDelay=5000)` × `findTop20`) |
+| Consumer drain rate / lag under load | **~150 ev/s** (07-08) / **lag ≈ 0** |
+| Alert behavior during burst | `OutboxBacklogDepthHigh` + `AgeHigh` reached *pending*, backlog self-drained in ~5.5 min, **neither fired** — the `for:` windows correctly separated a self-recovering burst from an incident |
+
+**The load run's real finding:** the pipeline's governing constraint is the outbox publisher's configured ceiling of 4 ev/s (batch 20 / poll 5 s), not CPU, DB, Kafka, or the consumer (~37× faster). Freshness SLOs (#6/#7) are therefore *capacity statements*: sustained ingest above 4 ev/s **will** breach them by design, and the correct response is turning the documented knob (batch size / poll interval), not muting the alert. Availability and latency targets confirmed with wide headroom.
+
 ---
-*Next: enable §4 metrics → validate §5 targets → recording rules → multi-window burn-rate alert rules + Alertmanager → runbook per alert. Tracked in `.ai/planning/backlog.md` (Phase 7).*
+*Phase 7 closed 2026-07-17: metrics → recording rules → multi-window burn-rate alerts + Alertmanager → runbooks → failure-injection verification (broker kill 07-08, consumer stall 07-16, terminal-FAILED live-fire 07-17) → baselined targets. Strategy record: ADR-017 (stalled-consumer detection), ADR-018 (burn-rate strategy + blind-spot taxonomy).*

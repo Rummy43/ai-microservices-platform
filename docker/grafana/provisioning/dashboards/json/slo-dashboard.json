@@ -1,0 +1,225 @@
+{
+  "uid": "platform-slo",
+  "title": "Platform / SLO Overview",
+  "tags": ["platform", "slo", "alerting"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "annotations": {
+    "list": [
+      {
+        "name": "Firing alerts",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "expr": "ALERTS{alertstate=\"firing\"}",
+        "titleFormat": "{{alertname}}",
+        "textFormat": "severity={{severity}} slo={{slo}}",
+        "iconColor": "red",
+        "enable": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Availability SLI (5m) — SLO 99.9%",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3,
+          "min": 0.99,
+          "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 0.998 },
+            { "color": "green", "value": 0.999 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "1 - job:http_error_ratio:rate5m", "legendFormat": "{{job}}" }
+      ]
+    },
+    {
+      "title": "Latency SLI ≤ 300 ms (5m) — SLO 99%",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3,
+          "min": 0.95,
+          "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 0.98 },
+            { "color": "green", "value": 0.99 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "sum by (job)(rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*\",le=\"0.3\"}[5m])) / sum by (job)(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m]))", "legendFormat": "{{job}}" }
+      ]
+    },
+    {
+      "title": "Error Budget Remaining (28d, 99.9% SLO)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "min": 0,
+          "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 0.25 },
+            { "color": "green", "value": 0.5 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "clamp_min(1 - (sum by (job)(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\",status=~\"5..\"}[28d])) or 0 * sum by (job)(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[28d]))) / (sum by (job)(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[28d])) * 0.001), 0)", "legendFormat": "{{job}}" }
+      ]
+    },
+    {
+      "title": "Firing Alerts (now)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)", "legendFormat": "firing" }
+      ]
+    },
+    {
+      "title": "Error-Budget Burn Rate (multiples of budget; fast page > 14.4, slow ticket > 6)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 6 },
+            { "color": "red", "value": 14.4 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "job:http_error_ratio:rate1h / 0.001", "legendFormat": "{{job}} 1h burn" },
+        { "expr": "job:http_error_ratio:rate6h / 0.001", "legendFormat": "{{job}} 6h burn" }
+      ]
+    },
+    {
+      "title": "Pipeline Flow — publisher vs consumer (the stall detector's two sides)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(outbox_published_total[5m]))", "legendFormat": "outbox published/s" },
+        { "expr": "sum(rate(notifications_sent_total[5m])) + sum(rate(notifications_duplicate_total[5m])) + sum(rate(notifications_failed_total[5m]))", "legendFormat": "consumer processed/s" }
+      ]
+    },
+    {
+      "title": "Outbox Freshness — oldest PENDING age (alert > 60s for 5m)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 60 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "outbox_oldest_pending_age_seconds", "legendFormat": "oldest PENDING age" }
+      ]
+    },
+    {
+      "title": "Outbox Backlog Depth (alert > 50 for 10m)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 50 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "outbox_pending", "legendFormat": "PENDING depth" }
+      ]
+    },
+    {
+      "title": "Terminal States — silent-loss watchdogs (any > 0 is an incident)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "outbox_failed", "legendFormat": "outbox terminal FAILED" },
+        { "expr": "dlt_unreprocessed", "legendFormat": "DLT unreprocessed" }
+      ]
+    },
+    {
+      "title": "Alert States (1 = pending, 2 = firing)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 2,
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "none" } }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "max by (alertname)(ALERTS{alertstate=\"pending\"}) * 1", "legendFormat": "{{alertname}} pending" },
+        { "expr": "max by (alertname)(ALERTS{alertstate=\"firing\"}) * 2", "legendFormat": "{{alertname}} FIRING" }
+      ]
+    }
+  ]
+}

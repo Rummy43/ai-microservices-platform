@@ -3,11 +3,11 @@
 # consumption trajectory, not on a single bad scrape. A short window confirms the
 # burn is happening *now*; the long window confirms it's not a one-off blip.
 #
-# Provisional SLO: availability 99.9% (budget = 0.001). Burn-rate multipliers:
+# SLO: availability 99.9% (budget = 0.001). Burn-rate multipliers:
 #   fast  = 14.4x  → ~2% of 28d budget in 1h   → threshold 0.0144   (page)
 #   slow  =  6x    → ~5% of 28d budget in 6h    → threshold 0.006    (ticket)
-# Targets are PROVISIONAL until baselined (docs/slo/sli-slo-catalog.md §5) — thresholds
-# derive directly from the SLO, so they move when the SLO is finalized.
+# Targets BASELINED 2026-07-17 under a 1,000-event load run (docs/slo/sli-slo-catalog.md §7);
+# thresholds derive directly from the SLO.
 groups:
   - name: slo_availability_burn_rate
     rules:
@@ -116,6 +116,22 @@ groups:
           summary: "Outbox PENDING depth > 50 for 10m"
           description: "Pending outbox events accumulating: {{ $value }}. Publisher throughput may be below ingest rate."
           runbook: "docs/runbooks/outbox-backlog.md"
+
+      # Terminal-state coverage (found 2026-07-16): a row that exhausts its publish retries
+      # goes FAILED — permanently. PENDING-age/depth alerts never see it (it left PENDING),
+      # DLT alerts never see it (it never reached Kafka). Third blind-spot class: metrics
+      # that decay (NaN lag), metrics that vanish (dead target), and terminal states nobody
+      # queries. This state never self-heals, hence severity=page despite small counts.
+      - alert: OutboxPublishTerminalFailure
+        expr: outbox_failed > 0
+        for: 2m
+        labels:
+          severity: page
+          slo: outbox_integrity
+        annotations:
+          summary: "{{ $value }} outbox event(s) permanently FAILED — silent event loss"
+          description: "Rows exhausted all publish retries and will never reach Kafka without a manual re-drive. The originating HTTP requests already returned 2xx."
+          runbook: "docs/runbooks/outbox-failed.md"
 
       - alert: DltDepthHigh
         expr: dlt_unreprocessed > 10

@@ -20,7 +20,7 @@ rate(outbox_retried_total[5m])        # transient failures being retried
 ## Likely causes → actions
 - **Publisher not running** → restart `user-service`; confirm `outbox_published_total` climbs and depth drains.
 - **Kafka/Schema Registry unreachable** → restore infra; retries then succeed.
-- **Poison row repeatedly failing** → inspect the oldest PENDING row; it should move to `FAILED` after bounded retries rather than blocking the poll.
+- **Poison row repeatedly failing** → inspect the oldest PENDING row; it should move to `FAILED` after bounded retries rather than blocking the poll. Once it does, this alert clears but `OutboxPublishTerminalFailure` takes over → see `outbox-failed.md`.
 
 ## Verify recovery
 `outbox_pending` → low; `outbox_oldest_pending_age_seconds` → ~0.
