@@ -44,6 +44,15 @@ dependencyManagement {
 	}
 }
 
+// Stage the pinned OTel agent next to the boot jar so the Docker build copies the
+// exact version this build resolved (single source of truth, no fetch at image build)
+tasks.register('copyOtelAgent', Copy) {
+	from configurations.otelAgent
+	into layout.buildDirectory.dir('otel')
+	rename { 'opentelemetry-javaagent.jar' }
+}
+tasks.named('bootJar') { finalizedBy 'copyOtelAgent' }
+
 tasks.named('bootRun') {
 	def agent = configurations.otelAgent
 	doFirst {

@@ -91,6 +91,9 @@ management:
   endpoint:
     health:
       show-details: always
+      # Kubernetes-style liveness/readiness groups (/actuator/health/liveness|readiness) - Phase 8 probes
+      probes:
+        enabled: true
   metrics:
     distribution:
       percentiles-histogram:
