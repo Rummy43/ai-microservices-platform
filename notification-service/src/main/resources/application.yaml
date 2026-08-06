@@ -2,7 +2,8 @@ spring:
   application:
     name: notification-service
   kafka:
-    bootstrap-servers: localhost:9092
+    # env-driven for compose/K8s; defaults preserve local bootRun
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: notification-group
       auto-offset-reset: earliest
@@ -14,7 +15,7 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
     properties:
-      schema.registry.url: http://localhost:8085
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8085}
       specific.avro.reader: true
     listener:
       type: single
@@ -26,9 +27,9 @@ spring:
     restart:
       enabled: false
   datasource:
-    url: jdbc:postgresql://localhost:5432/notification_db
-    username: postgres
-    password: root
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:notification_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:root}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2

@@ -10,7 +10,8 @@ spring:
         webmvc:
           routes:
             - id: user-service
-              uri: http://localhost:8080
+              # route targets env-driven for compose/K8s; defaults preserve local bootRun
+              uri: ${USER_SERVICE_URI:http://localhost:8080}
               predicates:
                 - Path=/api/v1/users/**
               filters:
@@ -25,7 +26,7 @@ spring:
                     methods: GET
 
             - id: admin-route
-              uri: http://localhost:8080
+              uri: ${USER_SERVICE_URI:http://localhost:8080}
               predicates:
                 - Path=/api/v1/admin/**
               filters:
@@ -35,7 +36,7 @@ spring:
                     fallbackUri: forward:/fallback/users
 
             - id: notification-service
-              uri: http://localhost:8081
+              uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8081}
               predicates:
                 - Path=/api/v1/notifications/**
               filters:
@@ -47,7 +48,12 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8180/realms/ai-microservices
+          # issuer-uri must match the `iss` claim in tokens (how clients reach Keycloak);
+          # jwk-set-uri is where THIS gateway fetches signing keys. They diverge once the
+          # gateway runs in a container network (iss = external URL, JWKS = internal DNS),
+          # so both are independently overridable. Default derives JWKS from the issuer.
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/ai-microservices}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/ai-microservices}/protocol/openid-connect/certs}
 
 resilience4j:
   circuitbreaker:
