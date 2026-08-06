@@ -8,7 +8,7 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
-      # Keep it simple: 9092 for your PC, 29092 for the Registry
+      # 9092 = host/bootRun clients; 29092 = intra-container (schema-registry, services)
       KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092'
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9092,PLAINTEXT_HOST://kafka:29092'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
@@ -26,9 +26,62 @@ services:
       - "8085:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      # THE FIX: Just the host and port. No protocol prefix here.
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    # Guards service startup: Schema Registry takes 60-120s after Kafka is ready.
+    # Without this gate the outbox publisher hits Avro serialization errors and marks
+    # rows FAILED permanently — the ADR-018 blind spot we found on 2026-07-16.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  # ── Databases ────────────────────────────────────────────────────────────────
+  # Host ports are offset (3307/5433) to avoid collision with the local Windows
+  # MySQL80 (3306) and PostgreSQL (5432) services. Container-internal ports are
+  # unchanged (3306/5432) — service containers connect over the Docker network.
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: user_db
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 127.0.0.1 forces TCP; 'localhost' would try the Unix socket which may not
+      # be ready at the moment the check fires even after mysqld is accepting connections.
+      # start_period: 120s covers cold-init (InnoDB init + schema bootstrap ~ 90s on first start)
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: notification_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # ── Observability stack ───────────────────────────────────────────────────────
 
   prometheus:
     image: prom/prometheus:latest
@@ -94,9 +147,13 @@ services:
       - loki
     volumes:
       - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml
-      - ../user-service/logs:/var/log/user-service:ro
-      - ../notification-service/logs:/var/log/notification-service:ro
+      # Named volumes shared with service containers; replaces the previous host
+      # bind-mounts (../service/logs) now that services run inside containers and
+      # write JSON logs to /app/logs inside each container (logback FILE_JSON appender).
+      - user-service-logs:/var/log/user-service:ro
+      - notification-service-logs:/var/log/notification-service:ro
     command: -config.file=/etc/promtail/promtail-config.yml
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
     container_name: keycloak
@@ -113,3 +170,82 @@ services:
     command:
       - start-dev
       - --import-realm
+
+  # ── Platform services ─────────────────────────────────────────────────────────
+  # OTel endpoint (http://tempo:4318, HTTP/protobuf) is baked into each image
+  # via ENV in the Dockerfile — no override needed here.
+  # Service names resolve via Docker's embedded DNS within the compose network.
+
+  user-service:
+    image: ai-platform/user-service:1.6.0
+    container_name: user-service
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: user_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    depends_on:
+      mysql:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - user-service-logs:/app/logs
+    restart: on-failure
+
+  notification-service:
+    image: ai-platform/notification-service:1.6.0
+    container_name: notification-service
+    ports:
+      - "8081:8081"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: notification_db
+      DB_USERNAME: postgres
+      DB_PASSWORD: root
+    depends_on:
+      postgres:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    volumes:
+      - notification-service-logs:/app/logs
+    restart: on-failure
+
+  api-gateway:
+    image: ai-platform/api-gateway:1.6.0
+    container_name: api-gateway
+    ports:
+      - "8082:8082"
+    environment:
+      USER_SERVICE_URI: http://user-service:8080
+      NOTIFICATION_SERVICE_URI: http://notification-service:8081
+      # issuer-uri = external URL (must match the `iss` claim in tokens issued by
+      # the host-mapped Keycloak on localhost:8180).
+      # jwk-set-uri = internal Docker DNS (gateway fetches signing keys over the
+      # container network — the issuer/JWKS split designed on 2026-08-05).
+      KEYCLOAK_ISSUER_URI: http://localhost:8180/realms/ai-microservices
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/ai-microservices/protocol/openid-connect/certs
+    depends_on:
+      - user-service
+      - notification-service
+      - keycloak
+    restart: on-failure
+
+volumes:
+  mysql-data:
+  postgres-data:
+  user-service-logs:
+  notification-service-logs:
