@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: schema-registry
+  template:
+    metadata:
+      labels:
+        app: schema-registry
+    spec:
+      # Confluent images map SCHEMA_REGISTRY_* env vars to config keys.
+      # K8s service links inject SCHEMA_REGISTRY_PORT=tcp://... which
+      # the image interprets as a deprecated 'PORT' config and then crashes.
+      enableServiceLinks: false
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z kafka 9092; do echo "waiting for kafka"; sleep 5; done']
+      containers:
+      - name: schema-registry
+        image: confluentinc/cp-schema-registry:7.6.0
+        ports:
+        - containerPort: 8081
+        env:
+        - name: SCHEMA_REGISTRY_HOST_NAME
+          value: schema-registry
+        - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
+          value: kafka:9092
+        - name: SCHEMA_REGISTRY_LISTENERS
+          value: http://0.0.0.0:8081
+        readinessProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 20
+        livenessProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          # 180s initial + 3×30s = 270s window. Schema-registry on WSL2/overlayfs needs
+          # ~2-3min to sync _schemas topic from Kafka before HTTP listener responds.
+          initialDelaySeconds: 180
+          periodSeconds: 30
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 1m
+          limits:
+            memory: 512Mi
+            cpu: 250m

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: microservices
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      # Prevents K8s from injecting MYSQL_PORT / MYSQL_SERVICE_HOST env vars.
+      # Same pattern as kafka — Confluent/MySQL Docker images interpret MYSQL_* vars.
+      enableServiceLinks: false
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: mysql-root-password
+        - name: MYSQL_DATABASE
+          value: user_db
+        # Shell expansion so MYSQL_ROOT_PASSWORD is picked up from the container env.
+        # -h 127.0.0.1 forces TCP; 'localhost' uses Unix socket which may not be ready.
+        # failureThreshold 120×10s = 20min: MySQL's first-init on WSL2/Docker Desktop
+        # can exceed 5min (slow fsync on overlayfs). Killing it mid-init leaves dirty InnoDB
+        # state that prevents all subsequent restarts ("not shut down cleanly").
+        startupProbe:
+          exec:
+            command: ['sh', '-c', 'mysqladmin ping -h 127.0.0.1 -u root -p$MYSQL_ROOT_PASSWORD']
+          periodSeconds: 10
+          failureThreshold: 120
+        # timeoutSeconds: 5 — mysqladmin ping takes >1s (default) under CPU contention on WSL2
+        readinessProbe:
+          exec:
+            command: ['sh', '-c', 'mysqladmin ping -h 127.0.0.1 -u root -p$MYSQL_ROOT_PASSWORD']
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 1m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-data
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 2Gi

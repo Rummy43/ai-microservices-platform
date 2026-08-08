@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+
+# Pin local image tags. Images must be loaded into the kind cluster before applying:
+#   kind load docker-image ai-platform/user-service:1.6.0 --name ai-platform
+#   kind load docker-image ai-platform/notification-service:1.6.0 --name ai-platform
+#   kind load docker-image ai-platform/api-gateway:1.6.0 --name ai-platform
+images:
+- name: ai-platform/user-service
+  newTag: "1.6.0"
+- name: ai-platform/notification-service
+  newTag: "1.6.0"
+- name: ai-platform/api-gateway
+  newTag: "1.6.0"

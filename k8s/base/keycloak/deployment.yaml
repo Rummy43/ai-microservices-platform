@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:26.2
+        args: ['start-dev', '--import-realm']
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KC_BOOTSTRAP_ADMIN_USERNAME
+          value: admin
+        - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: keycloak-admin-password
+        # Forces tokens to carry iss=http://keycloak:8080/... regardless of the
+        # access URL (port-forward, NodePort). The api-gateway validates against the
+        # same K8s internal service DNS — no issuer/JWKS split needed (compare compose,
+        # which required separate KEYCLOAK_ISSUER_URI / KEYCLOAK_JWK_SET_URI env vars).
+        - name: KC_HOSTNAME
+          value: keycloak
+        - name: KC_HOSTNAME_PORT
+          value: "8080"
+        - name: KC_HOSTNAME_STRICT
+          value: "false"
+        - name: KC_HOSTNAME_STRICT_HTTPS
+          value: "false"
+        # Keycloak start-dev only listens on port 8080 (no management port 9000).
+        # /realms/ai-microservices returns 200 once the realm is imported — a stronger
+        # check than /health/ready (confirms actual readiness for the gateway).
+        # startupProbe gives 30min for the initial start-dev + realm import on WSL2.
+        startupProbe:
+          httpGet:
+            path: /realms/ai-microservices
+            port: 8080
+          periodSeconds: 15
+          failureThreshold: 120
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /realms/ai-microservices
+            port: 8080
+          periodSeconds: 15
+          failureThreshold: 3
+          timeoutSeconds: 10
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 1m
+          limits:
+            memory: 768Mi
+            cpu: 500m
+        volumeMounts:
+        - name: realm-config
+          mountPath: /opt/keycloak/data/import
+          readOnly: true
+      volumes:
+      - name: realm-config
+        configMap:
+          name: keycloak-realm

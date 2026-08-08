@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      initContainers:
+      # Gateway fetches Keycloak OIDC discovery doc at startup — must be up first
+      # Check /realms/... not /health: confirms realm is imported, which is the actual
+      # gateway dependency. Management port 9000 is pod-direct only; 8080 is the service port.
+      - name: wait-for-keycloak
+        image: busybox:1.36
+        command: ['sh', '-c', 'until wget -q -O /dev/null http://keycloak:8080/realms/ai-microservices; do echo "waiting for keycloak"; sleep 5; done']
+      - name: wait-for-user-service
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z user-service 8080; do echo "waiting for user-service"; sleep 3; done']
+      containers:
+      - name: api-gateway
+        image: ai-platform/api-gateway:1.6.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+        env:
+        - name: USER_SERVICE_URI
+          value: http://user-service:8080
+        - name: NOTIFICATION_SERVICE_URI
+          value: http://notification-service:8081
+        # KC_HOSTNAME=keycloak forces iss=http://keycloak:8080/... on all tokens.
+        # Both issuer validation and JWKS fetching use the K8s internal service DNS.
+        # No issuer/JWKS split needed here (unlike compose where the split was required
+        # because iss=localhost:8180 but JWKS had to be fetched over the Docker network).
+        - name: KEYCLOAK_ISSUER_URI
+          value: http://keycloak:8080/realms/ai-microservices
+        - name: KEYCLOAK_JWK_SET_URI
+          value: http://keycloak:8080/realms/ai-microservices/protocol/openid-connect/certs
+        - name: OTEL_SDK_DISABLED
+          value: "true"
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8082
+          failureThreshold: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8082
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8082
+          periodSeconds: 10
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: 384Mi
+            cpu: 1m
+          limits:
+            memory: 768Mi
+            cpu: 500m

@@ -1,0 +1,13 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ai-platform
+nodes:
+- role: control-plane
+  # Pin to K8s 1.31 LTS — lighter footprint than 1.36, confirmed stable on 4GB Docker Desktop
+  image: kindest/node:v1.31.4
+  extraPortMappings:
+  # api-gateway NodePort — smoke-test from host via localhost:9082
+  # 9082 avoids collision with compose api-gateway already bound on 8082
+  - containerPort: 30082
+    hostPort: 9082
+    protocol: TCP

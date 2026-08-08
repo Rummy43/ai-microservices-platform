@@ -1,0 +1,16 @@
+# NodePort 30082 — kind extraPortMapping maps host:9082 → node:30082
+# (9082 chosen to avoid collision with compose api-gateway on 8082)
+# Smoke-test from host: curl http://localhost:9082/api/v1/users
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: microservices
+spec:
+  type: NodePort
+  selector:
+    app: api-gateway
+  ports:
+  - port: 8082
+    targetPort: 8082
+    nodePort: 30082
