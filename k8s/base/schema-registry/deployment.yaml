@@ -33,22 +33,30 @@ spec:
           value: kafka:9092
         - name: SCHEMA_REGISTRY_LISTENERS
           value: http://0.0.0.0:8081
+        # startupProbe gives 300s (30×10) for the _schemas topic sync from Kafka.
+        # On a constrained 4GB node this takes 3-5min; liveness probe is suppressed
+        # until startupProbe succeeds, preventing premature SIGTERM.
+        startupProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          failureThreshold: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /subjects
             port: 8081
-          initialDelaySeconds: 15
           periodSeconds: 10
-          failureThreshold: 20
+          failureThreshold: 3
+          timeoutSeconds: 5
         livenessProbe:
           httpGet:
             path: /subjects
             port: 8081
-          # 180s initial + 3×30s = 270s window. Schema-registry on WSL2/overlayfs needs
-          # ~2-3min to sync _schemas topic from Kafka before HTTP listener responds.
-          initialDelaySeconds: 180
           periodSeconds: 30
           failureThreshold: 3
+          timeoutSeconds: 5
         resources:
           requests:
             memory: 256Mi

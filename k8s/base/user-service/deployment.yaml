@@ -78,23 +78,27 @@ spec:
             port: 8080
           failureThreshold: 60
           periodSeconds: 10
+          timeoutSeconds: 5
         livenessProbe:
           httpGet:
             path: /actuator/health/liveness
             port: 8080
           periodSeconds: 30
           failureThreshold: 3
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /actuator/health/readiness
             port: 8080
           periodSeconds: 10
           failureThreshold: 3
+          timeoutSeconds: 5
         resources:
           requests:
-            memory: 384Mi
+            memory: 256Mi
             cpu: 1m
           limits:
-            # 768Mi: Spring Boot + JPA + OTel agent + Avro + Liquibase peaks at 512-700MB on startup
-            memory: 768Mi
+            # 640Mi: OTel agent disabled in K8s (OTEL_SDK_DISABLED=true); Spring Boot + JPA + Avro
+            # + Liquibase peaks at 500-600MB on startup on a constrained 4GB kind node.
+            memory: 640Mi
             cpu: 500m
