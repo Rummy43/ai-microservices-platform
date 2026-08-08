@@ -18,6 +18,26 @@ spec:
       - name: wait-for-mysql
         image: busybox:1.36
         command: ['sh', '-c', 'until nc -z mysql 3306; do echo "waiting for mysql"; sleep 3; done']
+      # Deadlock breaker: if a previous pod was killed mid-Liquibase (e.g. Docker Desktop 500
+      # error, OOMKill, or node pressure), it holds DATABASECHANGELOGLOCK indefinitely.
+      # Release any lock older than 5 minutes — safe with replicas=1 since no concurrent
+      # Liquibase process can legitimately hold it that long.
+      - name: release-liquibase-lock
+        image: mysql:8.0
+        command:
+        - sh
+        - -c
+        - |
+          mysql -u root -p"$MYSQL_ROOT_PASSWORD" -h mysql user_db \
+            -e "UPDATE DATABASECHANGELOGLOCK SET LOCKED=0, LOCKGRANTED=NULL, LOCKEDBY=NULL \
+                WHERE ID=1 AND LOCKED=1 AND LOCKGRANTED < NOW() - INTERVAL 5 MINUTE;" \
+            2>/dev/null; echo "Liquibase lock check done"
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: mysql-root-password
       # Guard against ADR-018 blind spot: schema-registry cold-start takes 60-120s;
       # the outbox publisher marks rows FAILED permanently if it can't reach it at startup
       - name: wait-for-schema-registry
