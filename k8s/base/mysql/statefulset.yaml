@@ -39,6 +39,7 @@ spec:
           exec:
             command: ['sh', '-c', 'mysqladmin ping -h 127.0.0.1 -u root -p$MYSQL_ROOT_PASSWORD']
           periodSeconds: 10
+          timeoutSeconds: 5
           failureThreshold: 120
         # timeoutSeconds: 5 — mysqladmin ping takes >1s (default) under CPU contention on WSL2
         readinessProbe:
