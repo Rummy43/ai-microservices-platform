@@ -5,6 +5,12 @@ metadata:
   namespace: microservices
 spec:
   replicas: 1
+  # Recreate instead of RollingUpdate: two SR pods in the same consumer group causes
+  # a LEADER_NOT_AVAILABLE rebalance error that kills the election thread permanently,
+  # leaving SR in a leaderless state until the next restart. With a single replica,
+  # Recreate costs zero availability and eliminates the two-pod window entirely.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: schema-registry
