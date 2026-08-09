@@ -1,0 +1,75 @@
+# Grafana Tempo (single binary) values for local kind cluster
+# Chart: grafana/tempo 1.24.4 — Tempo 2.9.0
+
+fullnameOverride: "tempo"
+
+tempo:
+  reportingEnabled: false
+  memBallastSizeMbs: 64
+
+  server:
+    http_listen_port: 3200
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+  # Metrics generator produces service-graph and span-metrics series via remote-write.
+  # Prometheus must have enableRemoteWriteReceiver: true (set in kube-prometheus-stack values).
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/write"
+    processor:
+      service_graphs: {}
+      span_metrics: {}
+    registry:
+      external_labels:
+        cluster: kind-ai-platform
+    storage:
+      path: "/var/tempo/metrics"
+    traces_storage:
+      path: "/var/tempo/traces_wal"
+
+  overrides:
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+  retention: 24h
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 10m
+    limits:
+      memory: 512Mi
+
+persistence:
+  enabled: true
+  storageClassName: standard
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+
+service:
+  type: ClusterIP
+
+serviceMonitor:
+  enabled: true
+  interval: "30s"
+  additionalLabels:
+    release: kube-prometheus-stack

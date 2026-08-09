@@ -1,0 +1,68 @@
+# Grafana Loki (single binary, filesystem) values for local kind cluster
+# Chart: grafana/loki 7.x — Loki 3.6.x
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  rulerConfig:
+    storage:
+      type: local
+
+singleBinary:
+  replicas: 1
+  # Clear default anti-affinity so single binary schedules on the kind single-node
+  affinity: {}
+  persistence:
+    enabled: true
+    storageClass: standard
+    size: 5Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 10m
+    limits:
+      memory: 512Mi
+
+# Disable SimpleScalable and Distributed components
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Disable gateway — direct ClusterIP access is sufficient for a local cluster
+gateway:
+  enabled: false
+
+# Disable bundled MinIO — we use filesystem storage
+minio:
+  enabled: false
+
+# Disable caches: default memcached allocation (9830Mi) exceeds the kind node's 8GB
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
+# Disable canary and helm tests — not needed for local dev
+lokiCanary:
+  enabled: false
+
+test:
+  enabled: false

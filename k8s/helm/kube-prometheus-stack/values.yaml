@@ -1,0 +1,139 @@
+# kube-prometheus-stack values for local kind cluster (single-node, 8GB RAM)
+# Chart: prometheus-community/kube-prometheus-stack 88.x
+
+# Disable scraping of k8s control-plane components that are not reachable in kind:
+# kube-scheduler/kube-controller-manager bind to 127.0.0.1 only; kubeProxy/etcd don't
+# run in the kind networking model (kubeProxy is replaced by kube-proxy DaemonSet, but
+# metrics are off by default). Trying to scrape these creates permanent "no targets"
+# noise in Prometheus.
+kubeProxy:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 24h
+    # Accept remote-write from Tempo metrics-generator (service graph + span metrics)
+    enableRemoteWriteReceiver: true
+    # Scrape ServiceMonitors and PodMonitors from ALL namespaces (including microservices)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleNamespaceSelector: {}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 50m
+      limits:
+        memory: 1Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 1m
+      limits:
+        memory: 256Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+grafana:
+  enabled: true
+  adminPassword: admin
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 10m
+    limits:
+      memory: 512Mi
+  persistence:
+    enabled: true
+    storageClassName: standard
+    size: 2Gi
+  # Provision Tempo + Loki datasources so Grafana starts fully wired.
+  # UIDs must match the derivedFields / tracesToLogs cross-references below.
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.monitoring:3200
+      access: proxy
+      jsonData:
+        httpMethod: GET
+        tracesToLogs:
+          datasourceUid: loki
+          filterByTraceID: true
+          filterBySpanID: false
+          mapTagNamesEnabled: true
+          mappedTags:
+            - key: service.name
+              value: service
+          spanStartTimeShift: "-1m"
+          spanEndTimeShift: "1m"
+        tracesToMetrics:
+          datasourceUid: prometheus
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+        lokiSearch:
+          datasourceUid: loki
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.monitoring:3100
+      access: proxy
+      jsonData:
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: '"traceId":"(\w+)"'
+            name: traceId
+            url: "$${__value.raw}"
+            urlDisplayLabel: View in Tempo
+
+# Reduce sub-chart resource footprint for the kind single-node cluster
+prometheus-node-exporter:
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 1m
+    limits:
+      memory: 128Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 1m
+    limits:
+      memory: 256Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 1m
+    limits:
+      memory: 256Mi

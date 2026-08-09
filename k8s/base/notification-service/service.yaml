@@ -3,9 +3,12 @@ kind: Service
 metadata:
   name: notification-service
   namespace: microservices
+  labels:
+    app: notification-service
 spec:
   selector:
     app: notification-service
   ports:
-  - port: 8081
+  - name: http
+    port: 8081
     targetPort: 8081

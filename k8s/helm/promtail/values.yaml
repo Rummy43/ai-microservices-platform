@@ -1,0 +1,29 @@
+# Grafana Promtail DaemonSet values for local kind cluster
+# Chart: grafana/promtail 6.x — Promtail 3.x
+
+config:
+  clients:
+    - url: http://loki.monitoring:3100/loki/api/v1/push
+
+  snippets:
+    # Extract structured log fields from JSON-formatted Spring Boot logs
+    pipelineStages:
+      - json:
+          expressions:
+            level: level
+            traceId: traceId
+            spanId: spanId
+            service: service
+      - labels:
+          level:
+          service:
+      - structured_metadata:
+          traceId:
+          spanId:
+
+resources:
+  requests:
+    memory: 32Mi
+    cpu: 1m
+  limits:
+    memory: 128Mi

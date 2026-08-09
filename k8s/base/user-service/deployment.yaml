@@ -67,10 +67,10 @@ spec:
             secretKeyRef:
               name: db-credentials
               key: mysql-root-password
-        # OTel disabled for K8s session 1: host.docker.internal:4318 is unreachable from
-        # kind pods on Windows WSL2. Session 2: remove this and set OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-        - name: OTEL_SDK_DISABLED
-          value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://tempo.monitoring:4318
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
         # startupProbe gives 600s (60×10) for Liquibase migrations + Kafka consumer init on WSL2
         startupProbe:
           httpGet:
@@ -98,7 +98,5 @@ spec:
             memory: 256Mi
             cpu: 1m
           limits:
-            # 640Mi: OTel agent disabled in K8s (OTEL_SDK_DISABLED=true); Spring Boot + JPA + Avro
-            # + Liquibase peaks at 500-600MB on startup on a constrained 4GB kind node.
             memory: 640Mi
             cpu: 500m

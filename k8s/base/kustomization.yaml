@@ -20,10 +20,13 @@ resources:
 # Platform services
 - user-service/deployment.yaml
 - user-service/service.yaml
+- user-service/servicemonitor.yaml
 - notification-service/deployment.yaml
 - notification-service/service.yaml
+- notification-service/servicemonitor.yaml
 - api-gateway/deployment.yaml
 - api-gateway/service.yaml
+- api-gateway/servicemonitor.yaml
 
 # Keycloak realm JSON mounted as a ConfigMap volume into the Keycloak pod.
 # Source file copied from docker/keycloak/ai-microservices-realm.json — update both if realm changes.
