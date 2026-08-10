@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-exporter
+  template:
+    metadata:
+      labels:
+        app: kafka-exporter
+    spec:
+      # Prevents K8s from injecting KAFKA_PORT / KAFKA_SERVICE_HOST env vars.
+      # kafka-exporter is configured via CLI flags, not env vars, so this avoids
+      # any env pollution from the co-located kafka service without side effects.
+      enableServiceLinks: false
+      containers:
+      - name: kafka-exporter
+        image: danielqsj/kafka-exporter:v1.7.0
+        args:
+        - --kafka.server=kafka:9092
+        - --web.listen-address=:9308
+        ports:
+        - name: metrics
+          containerPort: 9308
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9308
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9308
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 6
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: 32Mi
+            cpu: 1m
+          limits:
+            memory: 128Mi
+            cpu: 100m

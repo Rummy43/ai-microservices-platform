@@ -1,0 +1,231 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform-slo-rules
+  namespace: microservices
+spec:
+  groups:
+    # ──────────────────────────────────────────────
+    # Recording rules — precompute SLI ratios
+    # Ported from docker/prometheus/rules/slo-recording-rules.yml
+    # ──────────────────────────────────────────────
+    - name: slo_http_error_ratios
+      interval: 30s
+      rules:
+        # Availability error ratio (5xx / all served), per service.
+        # Guarded with `or (<total> * 0)` so a zero-error service records an explicit 0
+        # rather than an absent vector (absent = ambiguous between "healthy" and "broken scrape").
+        - record: job:http_error_ratio:rate5m
+          expr: |
+            (
+              sum by (job) (rate(http_server_requests_seconds_count{status=~"5..",uri!~"/actuator.*"}[5m]))
+              or
+              sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m])) * 0
+            )
+            /
+            sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m]))
+        - record: job:http_error_ratio:rate30m
+          expr: |
+            (
+              sum by (job) (rate(http_server_requests_seconds_count{status=~"5..",uri!~"/actuator.*"}[30m]))
+              or
+              sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[30m])) * 0
+            )
+            /
+            sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[30m]))
+        - record: job:http_error_ratio:rate1h
+          expr: |
+            (
+              sum by (job) (rate(http_server_requests_seconds_count{status=~"5..",uri!~"/actuator.*"}[1h]))
+              or
+              sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1h])) * 0
+            )
+            /
+            sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1h]))
+        - record: job:http_error_ratio:rate6h
+          expr: |
+            (
+              sum by (job) (rate(http_server_requests_seconds_count{status=~"5..",uri!~"/actuator.*"}[6h]))
+              or
+              sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[6h])) * 0
+            )
+            /
+            sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[6h]))
+
+    - name: slo_latency_ratios
+      interval: 30s
+      rules:
+        - record: job:http_latency_over_threshold_ratio:rate5m
+          expr: |
+            1 - (
+              sum by (job) (rate(http_server_requests_seconds_bucket{le="0.3",uri!~"/actuator.*"}[5m]))
+              /
+              sum by (job) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m]))
+            )
+
+    # ──────────────────────────────────────────────
+    # Alert rules
+    # Ported from docker/prometheus/rules/slo-alert-rules.yml + broker-side lag (Phase 8)
+    # ──────────────────────────────────────────────
+    - name: slo_availability_burn_rate
+      rules:
+        # SLO: availability 99.9% (budget = 0.001)
+        # fast = 14.4x → ~2% of 28d budget in 1h (page)
+        # slow = 6x    → ~5% of 28d budget in 6h (ticket)
+        - alert: AvailabilityFastBurn
+          expr: |
+            job:http_error_ratio:rate1h > 0.0144
+            and
+            job:http_error_ratio:rate5m > 0.0144
+          for: 2m
+          labels:
+            severity: page
+            slo: availability
+          annotations:
+            summary: "Fast error-budget burn on {{ $labels.job }}"
+            description: "5xx ratio > 14.4x the 99.9% budget over both 5m and 1h — ~2% of the 28d budget in an hour."
+            runbook: "docs/runbooks/availability-burn.md"
+
+        - alert: AvailabilitySlowBurn
+          expr: |
+            job:http_error_ratio:rate6h > 0.006
+            and
+            job:http_error_ratio:rate30m > 0.006
+          for: 15m
+          labels:
+            severity: ticket
+            slo: availability
+          annotations:
+            summary: "Slow error-budget burn on {{ $labels.job }}"
+            description: "5xx ratio > 6x the 99.9% budget over both 30m and 6h — budget will exhaust well before the window closes."
+            runbook: "docs/runbooks/availability-burn.md"
+
+    - name: slo_pipeline_freshness
+      rules:
+        # Client-side lag — catches a SLOW consumer. Does NOT catch a STOPPED consumer
+        # (records_lag_max decays to NaN when the consumer stops fetching, making the
+        # threshold expression permanently false). Verified by injection 2026-07-08.
+        # Broker-side complement: KafkaBrokerConsumerLagHigh below (fills that blind spot).
+        - alert: KafkaConsumerLagHigh
+          expr: max by (job) (kafka_consumer_fetch_manager_records_lag_max{job="notification-service"}) > 1000
+          for: 10m
+          labels:
+            severity: ticket
+            slo: consumer_lag
+          annotations:
+            summary: "notification-service consumer lag > 1000 for 10m"
+            description: "Consumer is falling behind the topic; notifications are getting stale. Current: {{ $value | humanize }} records."
+            runbook: "docs/runbooks/consumer-lag.md"
+
+        # Broker-side lag from kafka-exporter — reads lag directly from Kafka's committed
+        # offsets. Fires even when the consumer process is completely stopped (the blind spot
+        # where records_lag_max decays to NaN). Closes the ADR-017 / ADR-018 gap deferred
+        # to Phase 8. Severity: ticket (a stopped consumer also fires PipelineConsumptionStalled
+        # at severity=page — the two alerts cover different tiers of the same failure mode).
+        - alert: KafkaBrokerConsumerLagHigh
+          expr: |
+            sum by (consumergroup, topic) (
+              kafka_consumergroup_lag{
+                consumergroup="notification-group",
+                topic="user-created-topic"
+              }
+            ) > 1000
+          for: 5m
+          labels:
+            severity: ticket
+            slo: consumer_lag
+          annotations:
+            summary: "Broker reports high lag for {{ $labels.consumergroup }} on {{ $labels.topic }}"
+            description: "{{ $value | humanize }} unread records on the broker. Unlike the client-side metric, this fires even when the consumer process is stopped. Current lag: {{ $value }}."
+            runbook: "docs/runbooks/consumer-lag.md"
+
+        # Both-sides flow comparison — absent-safe, fires on a completely stalled pipeline.
+        # Verified by injection 2026-07-16: consumer paused → client lag NaN → this alert
+        # fired at exactly the 5m `for:` while KafkaConsumerLagHigh produced zero series.
+        - alert: PipelineConsumptionStalled
+          expr: |
+            sum(rate(outbox_published_total[10m])) > 0.05
+            unless
+            (
+              sum(rate(notifications_sent_total[10m]))
+              + sum(rate(notifications_duplicate_total[10m]))
+              + sum(rate(notifications_failed_total[10m]))
+            ) > 0
+          for: 5m
+          labels:
+            severity: page
+            slo: pipeline_flow
+          annotations:
+            summary: "Events are being published but nothing is being consumed"
+            description: "outbox_published_total is advancing while all consumer-side processing counters are flat or absent — the async pipeline is stalled end-to-end."
+            runbook: "docs/runbooks/pipeline-stall.md"
+
+        - alert: TargetDown
+          expr: up == 0
+          for: 3m
+          labels:
+            severity: page
+            slo: scrape_liveness
+          annotations:
+            summary: "Prometheus target {{ $labels.job }} is down"
+            description: "{{ $labels.job }} ({{ $labels.instance }}) has failed scrapes for 3m. All metric-based alerting for this service is blind until it returns."
+            runbook: "docs/runbooks/pipeline-stall.md"
+
+        - alert: OutboxBacklogAgeHigh
+          expr: outbox_oldest_pending_age_seconds > 60
+          for: 5m
+          labels:
+            severity: ticket
+            slo: outbox_freshness
+          annotations:
+            summary: "Oldest unpublished outbox event > 60s for 5m"
+            description: "The outbox publisher is not draining PENDING rows promptly (slow-drain). Oldest: {{ $value | humanizeDuration }}."
+            runbook: "docs/runbooks/outbox-backlog.md"
+
+        - alert: OutboxBacklogDepthHigh
+          expr: outbox_pending > 50
+          for: 10m
+          labels:
+            severity: ticket
+            slo: outbox_freshness
+          annotations:
+            summary: "Outbox PENDING depth > 50 for 10m"
+            description: "Pending outbox events accumulating: {{ $value }}. Publisher throughput may be below ingest rate."
+            runbook: "docs/runbooks/outbox-backlog.md"
+
+        # Terminal-state coverage. A row that exhausts its publish retries goes FAILED —
+        # permanently. PENDING-age/depth alerts never see it; DLT alerts never see it.
+        # The gauge existed pre-Phase-7; the gap was no rule consumed it. Fixed 2026-07-17.
+        # This state never self-heals, hence severity=page despite small counts.
+        - alert: OutboxPublishTerminalFailure
+          expr: outbox_failed > 0
+          for: 2m
+          labels:
+            severity: page
+            slo: outbox_integrity
+          annotations:
+            summary: "{{ $value }} outbox event(s) permanently FAILED — silent event loss"
+            description: "Rows exhausted all publish retries and will never reach Kafka without a manual re-drive. The originating HTTP requests already returned 2xx."
+            runbook: "docs/runbooks/outbox-failed.md"
+
+        - alert: DltDepthHigh
+          expr: dlt_unreprocessed > 10
+          for: 15m
+          labels:
+            severity: ticket
+            slo: dlt_depth
+          annotations:
+            summary: "Unreprocessed dead-letters > 10 for 15m"
+            description: "The self-healing reprocessor is not draining the DLT: {{ $value }} events outstanding."
+            runbook: "docs/runbooks/dlt-depth.md"
+
+        - alert: DltInflux
+          expr: sum(rate(notifications_dlt_total[5m])) > 0
+          for: 10m
+          labels:
+            severity: ticket
+            slo: dlt_influx
+          annotations:
+            summary: "Events are being dead-lettered (sustained)"
+            description: "Poison/failing events routed to the DLT over the last 10m — a systematic processing failure, not a transient blip."
+            runbook: "docs/runbooks/dlt-depth.md"

@@ -27,6 +27,12 @@ resources:
 - api-gateway/deployment.yaml
 - api-gateway/service.yaml
 - api-gateway/servicemonitor.yaml
+# Broker-side consumer lag (closes ADR-017/018 blind spot deferred from Phase 7)
+- kafka-exporter/deployment.yaml
+- kafka-exporter/service.yaml
+- kafka-exporter/servicemonitor.yaml
+# Phase 7 SLO alert + recording rules as PrometheusRule CRD (Prometheus Operator picks up automatically)
+- monitoring/prometheus-rules.yaml
 
 # Keycloak realm JSON mounted as a ConfigMap volume into the Keycloak pod.
 # Source file copied from docker/keycloak/ai-microservices-realm.json — update both if realm changes.
