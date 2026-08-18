@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo "waiting for postgres"; sleep 3; done']
+      # Creates ai_db if it doesn't exist — safe to run on every pod start.
+      # PostgreSQL init scripts (docker-entrypoint-initdb.d) only fire on first empty-volume start,
+      # so we use this init container instead — works on both fresh and existing PVCs.
+      - name: ensure-ai-db
+        image: pgvector/pgvector:pg17
+        command:
+        - sh
+        - -c
+        - |
+          PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres -tc \
+            "SELECT 1 FROM pg_database WHERE datname='ai_db'" | grep -q 1 \
+            || PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres \
+               -c "CREATE DATABASE ai_db; GRANT ALL PRIVILEGES ON DATABASE ai_db TO postgres;"
+          echo "ai_db ready"
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: postgres-password
+      - name: wait-for-ollama
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z ollama 11434; do echo "waiting for ollama"; sleep 5; done']
+      containers:
+      - name: ai-service
+        image: ai-platform/ai-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8083
+        env:
+        - name: OLLAMA_BASE_URL
+          value: http://ollama:11434
+        - name: OLLAMA_CHAT_MODEL
+          value: llama3.2
+        - name: OLLAMA_EMBEDDING_MODEL
+          value: nomic-embed-text
+        - name: DB_HOST
+          value: postgres
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: ai_db
+        - name: DB_USERNAME
+          value: postgres
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: postgres-password
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://tempo.monitoring:4318
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
+        # startupProbe: 60×10s = 600s — Flyway migrations + Ollama model warm-up on first request
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8083
+          failureThreshold: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8083
+          periodSeconds: 30
+          failureThreshold: 3
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8083
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 1m
+          limits:
+            memory: 640Mi
+            cpu: 500m

@@ -16,7 +16,9 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: postgres:17
+        # pgvector/pgvector:pg17 is a drop-in for postgres:17 with the vector extension
+        # pre-installed — required for ai-service Flyway V1 (CREATE EXTENSION vector).
+        image: pgvector/pgvector:pg17
         ports:
         - containerPort: 5432
         env:

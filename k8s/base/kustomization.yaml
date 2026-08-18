@@ -33,6 +33,15 @@ resources:
 - kafka-exporter/servicemonitor.yaml
 # Phase 7 SLO alert + recording rules as PrometheusRule CRD (Prometheus Operator picks up automatically)
 - monitoring/prometheus-rules.yaml
+# Phase 9 — AI service: Ollama LLM backend + ai-service (Spring AI 2.0 + PGVector)
+# Note: Ollama requires Docker Desktop memory ≥ 8 GB (llama3.2 loads ~2.5 GB into RAM).
+# model-pull-job runs once; on repeat apply the completed Job is left unchanged (models cached in PVC).
+- ollama/statefulset.yaml
+- ollama/service.yaml
+- ollama/model-pull-job.yaml
+- ai-service/deployment.yaml
+- ai-service/service.yaml
+- ai-service/servicemonitor.yaml
 
 # Keycloak realm JSON mounted as a ConfigMap volume into the Keycloak pod.
 # Source file copied from docker/keycloak/ai-microservices-realm.json — update both if realm changes.

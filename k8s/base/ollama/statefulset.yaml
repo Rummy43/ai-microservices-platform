@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ollama
+  namespace: microservices
+spec:
+  serviceName: ollama
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        env:
+        # Bind to all interfaces so the K8s Service can route to this pod
+        - name: OLLAMA_HOST
+          value: "0.0.0.0:11434"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          periodSeconds: 30
+          failureThreshold: 3
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 1m
+          # llama3.2 (3B) loads ~2.5 GB into RAM; nomic-embed-text adds ~500 MB.
+          # Requires Docker Desktop memory ≥ 8 GB (Settings → Resources → Memory).
+          limits:
+            memory: 5Gi
+            cpu: 2000m
+        volumeMounts:
+        - name: ollama-data
+          mountPath: /root/.ollama
+  volumeClaimTemplates:
+  - metadata:
+      name: ollama-data
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 10Gi

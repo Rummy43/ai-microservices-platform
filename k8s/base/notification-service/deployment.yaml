@@ -41,6 +41,8 @@ spec:
             secretKeyRef:
               name: db-credentials
               key: postgres-password
+        - name: AI_SERVICE_URL
+          value: http://ai-service:8083
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: http://tempo.monitoring:4318
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
