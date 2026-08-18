@@ -52,4 +52,7 @@ public class NotificationLog {
 
     @Column(name = "actor_roles", length = 512)
     private String actorRoles;
+
+    @Column(name = "message", columnDefinition = "TEXT")
+    private String message;
 }

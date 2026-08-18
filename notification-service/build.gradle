@@ -74,7 +74,7 @@ tasks.named('bootRun') {
 			"-Dotel.logs.exporter=none",
 			"-Dotel.exporter.otlp.protocol=http/protobuf",
 			"-Dotel.exporter.otlp.endpoint=http://localhost:4318",
-			"-Dotel.instrumentation.common.peer-service-mapping=localhost:5432=PostgreSQL,localhost:8085=SchemaRegistry,localhost:8180=Keycloak"
+			"-Dotel.instrumentation.common.peer-service-mapping=localhost:5432=PostgreSQL,localhost:8085=SchemaRegistry,localhost:8180=Keycloak,localhost:8083=AiService"
 		]
 	}
 }

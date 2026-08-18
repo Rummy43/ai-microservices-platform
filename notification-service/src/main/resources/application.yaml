@@ -85,6 +85,10 @@ info:
     description: Consumes user-created events and applies idempotent notification processing
     version: 1.0.0
 
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://localhost:8083}
+
 logging:
   pattern:
     level: "%5p [${spring.application.name:notification-service},traceId:%X{traceId}]"
