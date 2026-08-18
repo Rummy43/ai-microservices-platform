@@ -58,3 +58,28 @@ scrape_configs:
       - labels:
           level:
           service_name:
+
+  - job_name: ai-service
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: ai-service
+          service: ai-service
+          app: ai-service
+          __path__: /var/log/ai-service/*.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            logger: logger_name
+            thread: thread_name
+            message: message
+            traceId: traceId
+            service_name: service
+
+      - labels:
+          level:
+          service_name:

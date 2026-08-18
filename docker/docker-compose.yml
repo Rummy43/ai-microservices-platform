@@ -64,7 +64,10 @@ services:
       start_period: 120s
 
   postgres:
-    image: postgres:17
+    # pgvector/pgvector:pg17 is a drop-in for postgres:17 with the vector extension
+    # pre-installed — required for the ai-service PGVector store (Flyway V1 does
+    # CREATE EXTENSION vector which needs the extension available at the OS level).
+    image: pgvector/pgvector:pg17
     container_name: postgres
     ports:
       - "5433:5432"
@@ -74,6 +77,9 @@ services:
       POSTGRES_DB: notification_db
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Creates ai_db on first start from an empty volume only.
+      # Existing volumes: docker exec postgres psql -U postgres -c "CREATE DATABASE ai_db;"
+      - ./postgres/init-ai-db.sql:/docker-entrypoint-initdb.d/01-init-ai-db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -152,6 +158,7 @@ services:
       # write JSON logs to /app/logs inside each container (logback FILE_JSON appender).
       - user-service-logs:/var/log/user-service:ro
       - notification-service-logs:/var/log/notification-service:ro
+      - ai-service-logs:/var/log/ai-service:ro
     command: -config.file=/etc/promtail/promtail-config.yml
 
   keycloak:
@@ -170,6 +177,37 @@ services:
     command:
       - start-dev
       - --import-realm
+
+  # ── AI / LLM backend ──────────────────────────────────────────────────────────
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      # ollama list connects to the local server; fails if the server isn't up yet
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  ollama-init:
+    # Pulls the required models into the shared ollama-data volume once the server
+    # is healthy. ollama pull is idempotent — fast on subsequent compose-ups when
+    # models are already cached. restart: "no" means it runs once per compose-up.
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["sh", "-c", "ollama pull llama3.2 && ollama pull nomic-embed-text"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
 
   # ── Platform services ─────────────────────────────────────────────────────────
   # OTel endpoint (http://tempo:4318, HTTP/protobuf) is baked into each image
@@ -244,8 +282,33 @@ services:
       - keycloak
     restart: on-failure
 
+  ai-service:
+    image: ai-platform/ai-service:1.0.0
+    container_name: ai-service
+    ports:
+      - "8083:8083"
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_CHAT_MODEL: llama3.2
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ai_db
+      DB_USERNAME: postgres
+      DB_PASSWORD: root
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ai-service-logs:/app/logs
+    restart: on-failure
+
 volumes:
   mysql-data:
   postgres-data:
+  ollama-data:
   user-service-logs:
   notification-service-logs:
+  ai-service-logs:
