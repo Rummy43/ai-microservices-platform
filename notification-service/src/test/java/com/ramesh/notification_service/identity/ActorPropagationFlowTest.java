@@ -2,6 +2,7 @@ package com.ramesh.notification_service.identity;
 
 import com.ramesh.events.UserCreatedEvent;
 import com.ramesh.notification_service.entity.NotificationLog;
+import com.ramesh.notification_service.ai.AiEnrichmentClient;
 import com.ramesh.notification_service.kafka.KafkaConsumerService;
 import com.ramesh.notification_service.metrics.NotificationMetricsService;
 import com.ramesh.notification_service.repository.DeadLetterEventRepository;
@@ -35,12 +36,13 @@ class ActorPropagationFlowTest {
     private final ProcessedEventRepository processedEventRepository = mock(ProcessedEventRepository.class);
     private final NotificationLogRepository notificationLogRepository = mock(NotificationLogRepository.class);
     private final DeadLetterEventRepository deadLetterEventRepository = mock(DeadLetterEventRepository.class);
+    private final AiEnrichmentClient aiEnrichmentClient = mock(AiEnrichmentClient.class);
 
     private final NotificationMetricsService metricsService =
             new NotificationMetricsService(new SimpleMeterRegistry(), deadLetterEventRepository);
 
     private final NotificationService notificationService =
-            new NotificationService(processedEventRepository, notificationLogRepository, metricsService);
+            new NotificationService(processedEventRepository, notificationLogRepository, metricsService, aiEnrichmentClient);
 
     private final KafkaConsumerService consumerService =
             new KafkaConsumerService(notificationService, deadLetterEventRepository, metricsService);
