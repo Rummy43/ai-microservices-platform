@@ -1,22 +1,23 @@
 # AI-Driven Microservices Platform
 ![Build Status](https://github.com/Rummy43/ai-microservices-platform/actions/workflows/build.yml/badge.svg)
 
-An event-driven, cloud-native microservices platform designed to simulate real-world distributed systems using modern backend technologies.
+A production-grade, event-driven, cloud-native microservices platform built on Java 21, Spring Boot 4, and Kafka — demonstrating how real enterprise distributed systems are architected, observed, and operated.
 
-This project demonstrates how independent services communicate asynchronously using Kafka, ensuring scalability, resilience, and loose coupling — similar to production-grade enterprise systems.
+The platform covers the full engineering lifecycle: asynchronous event-driven communication, distributed tracing, structured alerting with SLOs, containerization, Kubernetes deployment with in-cluster observability, and an AI enrichment pipeline powered by a local LLM.
 
 ---
 
 ## 🎯 Project Goal
 
-To design and implement a **real-world microservices ecosystem** that:
+To design and implement a **production-grade microservices ecosystem** that:
 
-- Eliminates tight coupling between services
-- Handles failures gracefully using retry & DLQ patterns
-- Ensures data correctness under retries and duplicate events
-- Processes events asynchronously at scale
-- Demonstrates production-ready architecture patterns
-- Can be deployed to AWS using containerized infrastructure
+- Eliminates tight coupling between services via async event-driven communication
+- Handles failures gracefully: retry topics, Dead Letter Topics, transactional outbox, circuit breakers
+- Ensures data correctness under retries and duplicate events (idempotent consumer, DB unique constraints)
+- Monitors health with real SLIs/SLOs, multi-window burn-rate alerts, and live-fire–verified alert paths
+- Runs in Kubernetes with full in-cluster observability (Prometheus, Grafana, Tempo, Loki, Alertmanager)
+- Enriches events with AI using a local LLM (Ollama + Spring AI) in a non-fatal pipeline
+- Is deployable to AWS EKS via Terraform (Phase 10, roadmap)
 
 ---
 
@@ -31,28 +32,34 @@ A simplified distributed workflow:
    - Publishes pending outbox events to Kafka through a scheduled publisher
 
 2. **Notification Service**
-   - Consumes events from Kafka
-   - Applies idempotency checks
-   - Sends notifications (currently simulated/logged)
+   - Consumes `UserCreatedEvent` from Kafka
+   - Applies idempotency checks (processed-event tracking + DB unique constraint)
+   - Calls ai-service for an AI-enriched personalized welcome message (non-fatal: falls back to a static message if unavailable)
+   - Persists notification log with actor audit context
 
-3. **Future Extensions**
-   - Payment Service
-   - Analytics Service
-   - AI Processing Service
+3. **AI Service**
+   - Receives enrichment requests from notification-service
+   - Calls a local Ollama LLM (llama3.2) via Spring AI to generate personalized notification content
+   - Backed by PGVector for future semantic search / RAG capabilities
+   - Designed to be stateless and non-blocking: callers never fail if this service is down
 
 ---
 
 ## 🏗 Architecture Overview
 
-- Event-driven communication using Kafka
-- Schema-based messaging using Avro + Schema Registry
-- API Gateway as a centralized entry point
-- Independent deployable microservices
-- Centralized contract management via `common-schema`
-- Heterogeneous persistence strategy (MySQL + PostgreSQL)
-- Containerized using Docker
-- Reliable event delivery using Transactional Outbox Pattern
-- End-to-end identity propagation and audit context tracking
+- Event-driven communication using Kafka (KRaft mode)
+- Schema-based messaging using Avro + Confluent Schema Registry
+- API Gateway as the security perimeter (Keycloak OAuth2/JWT, RBAC, rate limiting, circuit breakers)
+- Independent deployable microservices with independent Gradle builds
+- Centralized contract management via `common-schema` Maven artifact
+- Heterogeneous persistence strategy (MySQL + PostgreSQL + PGVector)
+- Containerized services with layered Docker images (non-root, OTel agent baked in)
+- Deployed to Kubernetes via Kustomize manifests (kind cluster, production-ready manifest patterns)
+- Reliable event delivery via Transactional Outbox Pattern (PENDING → PROCESSING → PUBLISHED)
+- End-to-end identity propagation and audit context (Gateway → services → Kafka → dead-letter)
+- Full SLO-based alerting stack: SLIs per service, multi-window burn rates, Alertmanager, runbooks — all live-fire verified
+- In-cluster observability: kube-prometheus-stack + Tempo + Loki + Promtail + kafka-exporter
+- AI enrichment pipeline: local LLM (Ollama + Spring AI) called non-fatally from the Kafka consumer
 
 > See architecture diagram below 👇
 
@@ -182,6 +189,9 @@ notification_log / dead_letter_events (actor persisted)
 | 2 | [Idempotency in Distributed Systems: From Concept to Kafka Implementation](https://medium.com/@yara.ramesh/idempotency-in-distributed-systems-from-concept-to-kafka-implementation-68d453a05733) | Idempotency, @RetryableTopic, @DltHandler, duplicate prevention |
 | 3 | [Observability in Event-Driven Microservices: Metrics, Dashboards, and Traceability](https://medium.com/@yara.ramesh/observability-in-event-driven-microservices-metrics-dashboards-and-traceability-774678de1e2c) | Prometheus, Grafana, Loki, Promtail, structured logging |
 | 4 | [Why Database Transactions and Kafka Publishing Are Not Atomic](https://medium.com/@yara.ramesh/why-database-transactions-and-kafka-publishing-are-not-atomic-45923c390dd8) | Transactional Outbox Pattern, reliable event delivery, Micrometer |
+| 5 | [Your Service Map Is Lying: Verifying OpenTelemetry Auto-Instrumentation](https://medium.com/@yara.ramesh/your-service-map-is-lying-cfc84fb38990) | OpenTelemetry, service graph, Kafka spans, verify-don't-assume |
+| 6 | [Who Did This? Identity Across Async Boundaries](https://medium.com/@yara.ramesh/who-did-this-identity-across-async-boundaries-823c712b073f) | Identity propagation, audit context, Kafka headers, dead-letter attribution |
+| 7 | [The Outbox Pattern Is Not Enough](https://medium.com/@yara.ramesh/the-outbox-pattern-is-not-enough-07c4fe231296) | Outbox failure modes, terminal FAILED rows, alerting blind spots, SLO design |
 
 ---
 
@@ -219,12 +229,20 @@ User creation and event persistence happen in the same database transaction. A s
 ```
 ai-microservices-platform/
 │
-├── api-gateway            # Spring Cloud Gateway
-├── user-service           # Publishes user events (MySQL)
-├── notification-service   # Consumes and processes events (PostgreSQL)
-├── common-schema          # Shared Avro schemas
-├── docker                 # Kafka + Schema Registry setup
-├── docs                   # Architecture diagrams
+├── api-gateway/           # Spring Cloud Gateway — JWT validation, RBAC, circuit breakers, rate limiting
+├── user-service/          # UserCreatedEvent publisher — MySQL, Liquibase, Transactional Outbox
+├── notification-service/  # Event consumer — PostgreSQL, Flyway, idempotent processing, AI enrichment call
+├── ai-service/            # Spring AI 2.0 — Ollama LLM, PGVector, enrichment REST endpoint
+├── common-schema/         # Shared Avro schemas (Maven artifact → ~/.m2)
+├── docker/                # Docker Compose: full 15-container stack + all observability config
+│   ├── grafana/           # Provisioned dashboards + datasources (code, not click-ops)
+│   ├── prometheus/        # Scrape config + SLO recording/alert rules
+│   ├── tempo/             # Tempo config (metrics-generator, remote-write)
+│   └── promtail/          # Log shipping config
+├── k8s/                   # Kubernetes manifests
+│   ├── base/              # Kustomize base — all services, infra, observability
+│   └── helm/              # Helm values for kube-prometheus-stack, Tempo, Loki, Promtail
+└── docs/                  # Architecture diagrams, dashboard screenshots, SLO catalog, runbooks
 ```
 
 ---
@@ -234,19 +252,22 @@ ai-microservices-platform/
 ```
 Client Request
       ↓
-API Gateway (JWT validation → inject identity headers)
+API Gateway (JWT validation → rate limiting → circuit breaker → identity headers)
       ↓
 User Service (MySQL Transaction)
       ├── Save User
-      └── Save Outbox Event (+ actor & traceId)
+      └── Save Outbox Event (+ actor & traceId, same transaction)
       ↓
-Outbox Publisher
+Outbox Publisher (scheduled, PENDING → PROCESSING → PUBLISHED)
       ↓
-Kafka Topic (event + actor & traceId headers)
+Kafka Topic: user-created-events (Avro, Schema Registry validated)
       ↓
 Notification Service (PostgreSQL)
-      ↓
-Idempotency Check → Process → Log Notification (+ actor)
+      ├── Idempotency Check (processed_events table)
+      ├── AI Enrichment Call → ai-service POST /api/v1/ai/enrich
+      │     ├── [Ollama available] → llama3.2 generates personalized message
+      │     └── [Ollama unavailable] → fallback: static welcome message (non-fatal)
+      └── Persist notification_log (+ actor + enriched message)
 ```
 
 ---
@@ -273,27 +294,30 @@ Idempotency Check → Process → Log Notification (+ actor)
 ### Data
 - MySQL (User Service)
 - PostgreSQL (Notification Service)
-- Flyway (Notification Service migrations)
+- PGVector / `pgvector/pgvector:pg17` (AI Service — vector store)
+- Flyway (Notification Service + AI Service migrations)
 - Liquibase (User Service migrations)
 
+### AI
+- Spring AI 2.0 (`spring-ai-starter-model-ollama`, `spring-ai-starter-vector-store-pgvector`)
+- Ollama (local LLM runtime — llama3.2 chat, nomic-embed-text embeddings)
+
 ### DevOps & Infrastructure
-- Docker
-- Kubernetes (EKS - planned)
-- Terraform (planned)
+- Docker + Docker Compose (full 15-container stack)
+- Kubernetes (kind cluster, Kustomize base/overlays — `k8s/base/`)
+- Helm (kube-prometheus-stack, Tempo, Loki, Promtail)
+- Terraform + AWS EKS (Phase 10, roadmap)
 - GitHub Actions (CI)
 
 ### Observability
-- Spring Boot Actuator
-- Micrometer
-- Prometheus
-- Grafana
-- OpenTelemetry Java Agent
-- Grafana Tempo (distributed tracing)
-- Service Map / Dependency Graph
-- JVM metrics monitoring
-- HTTP request rate monitoring
-- Kafka consumer throughput monitoring
-- CPU utilization tracking
+- Spring Boot Actuator + Micrometer → Prometheus
+- Grafana (provisioned dashboards: JVM, HTTP, Kafka, Database, Business, Resilience, SLO overview)
+- OpenTelemetry Java Agent 2.28.1 (zero-code: HTTP, JDBC, Kafka spans)
+- Grafana Tempo (distributed tracing + service-graph metrics-generator)
+- Grafana Loki + Promtail (structured JSON logs, bidirectional Tempo↔Loki correlation)
+- kube-prometheus-stack (Prometheus Operator, in-cluster scraping via ServiceMonitor CRDs)
+- Alertmanager (SLO burn-rate alerts, pipeline-stall detection, runbooks)
+- kafka-exporter (broker-side consumer lag — closes the NaN-metric blind spot)
 
 ---
 
@@ -526,7 +550,7 @@ traces_service_graph_request_total
 
 Synchronous service relationships and database dependencies — e.g. `api-gateway → user-service`, `user-service → MySQL`, `notification-service → PostgreSQL` — appear as edges in Grafana's Service Graph.
 
-> **Known limitation:** the asynchronous `user-service → notification-service` edge requires the Kafka producer and consumer spans to share a trace. The current OpenTelemetry Java Agent build does not emit Kafka messaging spans under the platform's Spring Boot version, so this messaging edge is not yet rendered. It is tracked as a follow-up (agent upgrade); synchronous HTTP and database edges are generated and visible today.
+> **Note:** The asynchronous `user-service → notification-service` edge was a known gap until 2026-07-17, when an OTel Java Agent upgrade (2.11.0 → 2.28.1) closed the Kafka span blind spot caused by kafka-clients 4.x version skew. Kafka producer and consumer spans now appear in Tempo; the full service topology — including the async hop — renders in the Service Graph from live trace data.
 
 ### Features
 
@@ -589,7 +613,7 @@ In **Explore → Loki**, query for trace-bearing lines and expand a log row — 
 
 In **Explore → Tempo**, open any span and use the **logs** link to jump to the correlated Loki stream.
 
-> **Known limitation:** log lines emitted on Kafka consumer threads and the `@Scheduled` outbox publisher currently log an empty `traceId` — OTel context is not yet propagated onto those threads (same root cause as the missing Kafka service-map edge). HTTP request-path logs are fully correlated today.
+> **Note:** Kafka consumer thread and outbox-publisher log lines were missing `traceId` context until the OTel agent upgrade (2.28.1, 2026-07-17) which closed the Kafka instrumentation gap. HTTP, JDBC, and Kafka spans are all correlated; the async publish→consume hop is now a single connected trace.
 
 ### Features
 
@@ -770,102 +794,331 @@ curl -s 'localhost:9090/api/v1/query?query=resilience4j_circuitbreaker_state{sta
 
 ---
 
+## 🎯 SLO-Based Alerting & Observability Blind-Spot Taxonomy
+
+The platform defines per-service Service Level Indicators (SLIs) and Objectives (SLOs), implements a full Prometheus alerting stack, and verifies every alert path by controlled failure injection before trusting it.
+
+### SLI Catalog (excerpt)
+
+| SLI | Service | Target | Metric |
+|-----|---------|--------|--------|
+| Gateway availability | api-gateway | ≥ 99.9% | `1 - rate(5xx) / rate(all)` |
+| Gateway p99 latency | api-gateway | ≤ 500ms | `http_server_requests_seconds` histogram |
+| Pipeline consumption | notification-service | Lag = 0 within 5m | Both-sides flow comparison (absent-safe) |
+| Outbox backlog age | user-service | Oldest PENDING ≤ 300s | `outbox_oldest_pending_age_seconds` |
+| Terminal event loss | user-service | 0 FAILED rows | `outbox_failed` gauge |
+
+### Alerting Strategy — Multi-Window Burn Rates
+
+Rather than threshold alerts ("5xx > N"), the platform uses **Google SRE-style burn-rate alerts**: error budget consumption trajectory, not raw values.
+
+| Alert | Window | Multiplier | Severity |
+|-------|--------|------------|----------|
+| `AvailabilityFastBurn` | 5m AND 1h | 14.4× | page |
+| `AvailabilitySlowBurn` | 30m AND 6h | 6× | ticket |
+| `OutboxBacklogAgeHigh` | for: 5m | — | page |
+| `OutboxPublishTerminalFailure` | for: 2m | — | page |
+| `PipelineConsumptionStalled` | for: 5m | — | page |
+| `KafkaBrokerConsumerLagHigh` | for: 5m | — | warning |
+
+### Blind-Spot Taxonomy (Empirically Discovered)
+
+Three classes of structurally invisible failures were identified and remediated through live injection testing:
+
+| Class | Description | Detection |
+|-------|-------------|-----------|
+| **Metrics that decay** | `records_lag_max` → NaN when consumer stops fetching — no value, no alert fires | Both-sides pipeline flow counter comparison (absent-safe `unless` semantics) |
+| **Metrics that vanish** | Dead scrape target silences every rule for that service | `TargetDown` backstop |
+| **Terminal states nobody queries** | Outbox rows marked `FAILED` after retry exhaustion — silent event loss, row sits in DB unmonitored | `outbox_failed` gauge + `OutboxPublishTerminalFailure` (severity: page) |
+
+Every alert in the platform has been **live-fire verified**: injected failure → alert pending at threshold → fires at confirmation window → routed to Alertmanager with runbook → auto-resolved on recovery. An untested alert is a hypothesis, not a guarantee.
+
+### SLO Baseline (measured 2026-07-17)
+
+1,000 JWT-authenticated requests through the gateway at ~14 req/s (70 seconds):
+- **Availability SLI:** 1.0 (zero 5xx/4xx)
+- **Latency p99:** 186ms (gateway) / 177ms (user-service)
+- **Burst suppression verified:** 720-row backlog took two alerts to *pending*; drained before either fired — system correctly distinguished a burst from an incident
+
+---
+
+## ☸️ Kubernetes Deployment
+
+The platform runs in a local **kind cluster** (Kubernetes 1.31.4 LTS) using **Kustomize** base/overlays. All manifests are in `k8s/base/`.
+
+### What Runs in the Cluster
+
+| Component | Image | Notes |
+|-----------|-------|-------|
+| user-service | `ai-platform/user-service:*` | Layered Boot 4, OTel agent, uid-1001 |
+| notification-service | `ai-platform/notification-service:*` | Same; `AI_SERVICE_URL` injected |
+| api-gateway | `ai-platform/api-gateway:*` | Same |
+| ai-service | `ai-platform/ai-service:1.0.0` | Spring AI 2.0, PGVector |
+| kafka | `confluentinc/cp-kafka:7.5.0` | KRaft mode, `enableServiceLinks: false` |
+| schema-registry | `confluentinc/cp-schema-registry:7.5.0` | `strategy: Recreate` (single-replica rolling-update is fatal) |
+| mysql | `mysql:8.0` | User service DB |
+| postgres | `pgvector/pgvector:pg17` | notification + ai databases |
+| keycloak | `quay.io/keycloak/keycloak:25.0` | Realm auto-imported from `docker/keycloak/ai-microservices-realm.json` |
+| kafka-exporter | `danielqsj/kafka-exporter:v1.7.0` | Broker-side consumer lag |
+| kube-prometheus-stack | Helm 88.x | Prometheus Operator + Grafana + Alertmanager |
+| Tempo | Helm 2.9.0 | Distributed tracing + service-graph |
+| Loki | Helm 3.6.11 | Log aggregation (caches disabled for single-node) |
+| Promtail | Helm 3.5.1 | DaemonSet log shipping |
+
+### Apply the Stack
+
+```bash
+# Create the cluster
+kind create cluster --name ai-platform --config k8s/kind-config.yaml
+
+# Install in-cluster observability (Helm)
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace -f k8s/helm/kube-prometheus-stack-values.yaml
+
+helm upgrade --install tempo grafana/tempo-distributed \
+  -n monitoring -f k8s/helm/tempo-values.yaml
+
+helm upgrade --install loki grafana/loki \
+  -n monitoring -f k8s/helm/loki-values.yaml
+
+helm upgrade --install promtail grafana/promtail \
+  -n monitoring -f k8s/helm/promtail-values.yaml
+
+# Apply platform services
+kubectl apply -k k8s/base/
+```
+
+### Key Kubernetes Engineering Decisions
+
+Five structural failure modes were discovered and resolved during cluster bringup — each with a non-obvious root cause:
+
+1. **`enableServiceLinks: false` on Confluent images** — K8s injects a `KAFKA_PORT=tcp://...` env var into every pod; Confluent images interpret `KAFKA_*` vars as broker config, crashing the broker.
+2. **`cpu: 1m` explicit requests** — K8s sets `requests.cpu = limits.cpu` when requests are omitted; 8 pods × 500m = 4000m > 2000m allocatable → all pods Pending.
+3. **`timeoutSeconds: 5` on all probes** — default 1s times out under WSL2/Docker Desktop CPU contention; MySQL Not-Ready cascades into HikariCP fast-fail in dependent services.
+4. **Keycloak readiness on `/realms/<realm>:8080`** — `start-dev` only opens port 8080 (not the management port 9000 used in production mode); `/health/ready` returns 404; the realm endpoint is the correct readiness signal.
+5. **Schema Registry `strategy: Recreate`** — a rolling update creates two concurrent pods in the same consumer group, causing a `LEADER_NOT_AVAILABLE` rebalance that kills the `KafkaGroupLeaderElector` thread permanently in a single-replica setup.
+
+---
+
+## 🤖 AI Service (Spring AI + Ollama + PGVector)
+
+The `ai-service` module adds an LLM enrichment stage to the event-processing pipeline. It is designed as a **non-blocking, non-fatal dependency**: if it is unavailable, the Kafka consumer falls back silently and event processing continues unaffected.
+
+### Architecture
+
+```text
+notification-service (Kafka consumer)
+      │
+      │  POST /api/v1/ai/enrich
+      │  { userId, userName, userEmail, eventType }
+      ▼
+ai-service (:8083)
+      │
+      ├── OllamaChatModel (llama3.2 via Ollama :11434)
+      │     "Generate a personalized 2-sentence welcome for {name}..."
+      │
+      └── Response: { enrichedMessage, modelUsed, processingTimeMs }
+            ↓ (on any failure: timeout, 5xx, network error)
+      AiEnrichmentClient.orElse("Welcome! Your account has been created.")
+```
+
+### Non-Fatal Design (ADR-020)
+
+`AiEnrichmentClient` wraps every call in try-catch and returns `Optional<String>`. A 5-second connect / 30-second read timeout prevents blocking the Kafka consumer thread beyond a bounded window. The caller uses `.orElse(FALLBACK_MESSAGE)`, so Kafka never retries and never DLT's due to AI latency or unavailability.
+
+```java
+// The entire enrichment path — if anything throws, the consumer still ACKs
+String message = aiEnrichmentClient
+    .enrich(userId, userName, email)
+    .orElse(FALLBACK_MESSAGE);
+```
+
+### Services & Ports
+
+| Service | Port | Notes |
+|---------|------|-------|
+| ai-service | 8083 | `POST /api/v1/ai/enrich`, `GET /actuator/health` |
+| Ollama | 11434 | Local LLM runtime; load models via `ollama pull` |
+
+### Resource Requirements
+
+| Mode | RAM requirement |
+|------|----------------|
+| ai-service only (no Ollama) | 256MB — runs fine, falls back on every call |
+| ai-service + Ollama + llama3.2 | ≥ 8GB Docker Desktop / kind node |
+| nomic-embed-text (embeddings) | ~500MB additional |
+
+See [`ai-service/README.md`](ai-service/README.md) for setup, local run, and model pull instructions.
+
+---
+
 ## 🚀 Running Locally
 
-### 1. Start Infrastructure
+### Prerequisites
+
 ```bash
-docker-compose up -d
+# 1. Install Avro schemas to local ~/.m2 (required before any service build)
+cd common-schema && mvn clean install
 ```
 
-### 2. Start Services
+### Option A — Docker Compose (full stack)
+
 ```bash
-cd api-gateway && ./gradlew bootRun
-cd user-service && ./gradlew bootRun
-cd notification-service && ./gradlew bootRun
+cd docker && docker-compose up -d
+# All services + infrastructure + observability in ~15 containers
+# Wait ~4 min for Schema Registry and ~8-20 min for Keycloak on first start
 ```
+
+### Option B — Gradle bootRun (local development)
+
+```bash
+# Start infra first (Kafka, Schema Registry, Keycloak, observability)
+cd docker && docker-compose up -d
+
+# Then start services
+cd user-service && ./gradlew bootRun        # :8080
+cd notification-service && ./gradlew bootRun # :8081
+cd api-gateway && ./gradlew bootRun          # :8082
+cd ai-service && ./gradlew bootRun           # :8083 (requires Ollama running separately)
+```
+
+### Option C — Kubernetes (kind cluster)
+
+```bash
+# Requires Docker Desktop ≥ 8GB for Ollama; ≥ 4GB for everything else
+kind create cluster --name ai-platform
+kubectl apply -k k8s/base/
+
+# Get a token (from inside the cluster — avoids Keycloak iss-claim mismatch)
+kubectl exec deploy/user-service -n microservices -- sh -c '
+  TOKEN=$(curl -s -X POST http://keycloak:8080/realms/ai-microservices/protocol/openid-connect/token \
+    -d "grant_type=password&client_id=api-gateway&username=resilience-demo&password=LoadBase2026!" \
+    | sed -n "s/.*\"access_token\":\"\([^\"]*\)\".*/\1/p")
+  curl -s -w "\nHTTP %{http_code}" -X POST http://api-gateway:8082/api/v1/users \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d "{\"firstName\":\"Test\",\"lastName\":\"User\",\"email\":\"test@example.com\"}"'
+```
+
+### Test credentials (baked into realm JSON)
+
+| Field | Value |
+|-------|-------|
+| Username | `resilience-demo` |
+| Password | `LoadBase2026!` |
+| Client ID | `api-gateway` (public, direct-access grants) |
+| Realm | `ai-microservices` |
 
 ---
 
 ## 📌 Current Status
 
-- ✅ Event publishing (User Service)
-- ✅ Event consumption (Notification Service)
-- ✅ Avro schema integration
-- ✅ Dockerized Kafka (KRaft mode)
-- ✅ Retry mechanism using `@RetryableTopic`
-- ✅ Dead Letter Topic (DLT) handling with `@DltHandler`
-- ✅ Idempotent consumer with processed event tracking
-- ✅ Spring Boot Actuator enabled
-- ✅ Prometheus metrics endpoint exposed
-- ✅ Grafana observability dashboard implemented
-- ✅ Distributed request tracing with correlation IDs
-- ✅ Centralized logging with Loki and Promtail
-- ✅ Structured JSON logging with traceId enrichment
-- ✅ Transactional outbox pattern for reliable Kafka publishing
-- ✅ Scheduled outbox publisher with retry-safe status handling
-- ✅ Custom Micrometer metrics for transactional outbox monitoring
-- ✅ Grafana operational dashboard for outbox publishing visibility
-- ✅ Outbox publish rate and latency monitoring
-- ✅ Spring Cloud API Gateway 
-- ✅ Gateway-based routing 
-- ✅ Correlation ID propagation through Gateway 
-- ✅ Gateway Prometheus metrics 
-- ✅ Gateway Grafana monitoring
-- ✅ Centralized entry point for services
-- ✅ Keycloak integration
-- ✅ JWT authentication at API Gateway
-- ✅ OAuth2 Resource Server configuration
-- ✅ Protected API routes
-- ✅ Role-Based Access Control (RBAC)
-- ✅ Keycloak realm-role mapping
-- ✅ End-to-end identity propagation (Gateway → services → Kafka)
-- ✅ Trusted, spoof-resistant identity headers minted at the Gateway
-- ✅ Actor & traceId captured transactionally with the outbox event
-- ✅ Actor identity propagated through Kafka headers (retry/DLQ-safe)
-- ✅ Audit context persisted on notification logs and dead-letter events
-- ✅ MDC enrichment with actor identity for structured logging
-- ✅ OpenTelemetry Java Agent instrumentation (zero application code changes)
-- ✅ OTLP trace export to Grafana Tempo
-- ✅ End-to-end traces for `api-gateway → user-service → MySQL`
-- ✅ Service Map / Dependency Graph generation (Tempo metrics-generator → Prometheus remote-write → Grafana Service Graph)
-- ✅ OTel `traceId`/`spanId` embedded in structured JSON logs
-- ✅ Logs → traces navigation via Loki derived fields (**View Trace** → Tempo)
-- ✅ Traces → logs navigation via Tempo `tracesToLogsV2` (span → Loki stream)
-- ✅ Cardinality-safe Loki ingestion (trace IDs queried from line content, not stream labels)
-- ✅ Five provisioned Grafana dashboards (JVM, HTTP, Kafka, Database, Business) as version-controlled JSON
-- ✅ Business KPI instrumentation: users registered/failed, notifications sent/failed/duplicate
+### Epoch A — Event-Driven Foundation
+- ✅ Event publishing (User Service → Kafka)
+- ✅ Event consumption (Notification Service, idempotent)
+- ✅ Avro schema integration (Confluent Schema Registry)
+- ✅ Kafka in KRaft mode (no ZooKeeper)
+- ✅ Retry topics + Dead Letter Topic with `@RetryableTopic` / `@DltHandler`
+- ✅ Idempotent consumer (processed-event table + DB unique constraint as final arbiter)
+- ✅ Heterogeneous persistence: MySQL (Liquibase) + PostgreSQL (Flyway), `ddl-auto=none`
+
+### Epoch B — Observability & Reliability
+- ✅ Spring Boot Actuator + Micrometer + Prometheus scraping
+- ✅ Grafana dashboards: JVM, HTTP, Kafka, Database, Business (all provisioned as code)
+- ✅ Business KPI counters: users registered/failed, notifications sent/failed/duplicate suppressed
 - ✅ End-to-end business funnel panel (users → outbox → notifications)
-- ✅ Resilience4j circuit breakers on gateway routes with fast-fail 503 fallbacks
-- ✅ Edge rate limiting (20 req/s) ahead of JWT validation, with 429 + Retry-After
-- ✅ Gateway retry filter for idempotent GET reads
-- ✅ Outbox transient-retry visibility (`outbox_retried_total`)
-- ✅ DLT activity metric (`notifications_dlt_total`) and Platform / Resilience dashboard
-- ✅ Liveness/readiness probes verified on all services
-- ✅ Failure scenarios demonstrated: downstream outage (CB), consumer failure → retry topics → DLT, DB transient failure with self-healing recovery
-- 🚧 Asynchronous `user-service → notification-service` service-map edge and consumer/scheduler-thread trace context (pending Kafka span instrumentation / OTel agent upgrade)
+- ✅ Structured JSON logging with `traceId`/`spanId` enrichment (OTel MDC injection)
+- ✅ Centralized log aggregation: Loki + Promtail, cardinality-safe ingestion
+- ✅ Transactional Outbox Pattern (PENDING → PROCESSING → PUBLISHED, retry-safe)
+- ✅ Outbox health metrics + operational dashboard
+
+### Epoch C — Security & Identity
+- ✅ Spring Cloud Gateway MVC — centralized entry point, routing, metrics
+- ✅ Keycloak OAuth2/JWT authentication (realm-as-code, auto-imported)
+- ✅ Role-Based Access Control (USER / ADMIN)
+- ✅ Anti-spoofing: gateway unconditionally overwrites `X-User-*` headers from verified JWT
+- ✅ End-to-end identity propagation (Gateway → services → Kafka headers → DLT rows)
+- ✅ Actor context persisted transactionally with the outbox event for async audit attribution
+
+### Epoch D — Distributed Tracing & Correlation
+- ✅ OpenTelemetry Java Agent 2.28.1 (zero code changes: HTTP, JDBC, Kafka spans all instrumented)
+- ✅ OTLP trace export to Grafana Tempo
+- ✅ Full service topology in Tempo Service Graph — including the async Kafka hop (resolved 2026-07-17)
+- ✅ Bidirectional Tempo↔Loki correlation (Logs → Trace via derived fields; Trace → Logs via `tracesToLogsV2`)
+- ✅ Resilience4j circuit breakers + rate limiter (20 req/s) + retry filter on gateway
+- ✅ Self-healing DLT reprocessor (scheduled idempotent replay, exponential backoff, poison cap)
+- ✅ Platform / Resilience dashboard; all failure scenarios live-demonstrated
+
+### Epoch E — SLOs & Production Alerting
+- ✅ Per-service SLI definitions: availability, latency, consumer lag, outbox age, terminal failures
+- ✅ Prometheus recording rules (SLI ratios, precomputed)
+- ✅ Multi-window burn-rate alerts (14.4× fast / 6× slow for availability)
+- ✅ Pipeline-stall alert (absent-safe both-sides flow — survives NaN consumer-lag decay)
+- ✅ `OutboxPublishTerminalFailure` alert (terminal FAILED rows — silent event loss class)
+- ✅ `TargetDown` backstop (scrape-target death silences all other rules)
+- ✅ Alertmanager wired and routing alerts to Prometheus
+- ✅ Runbooks per alert under `docs/runbooks/`
+- ✅ SLO overview dashboard (10 panels: SLI compliance, error budget, burn rates, terminal watchdogs)
+- ✅ Every alert live-fire verified by controlled failure injection
+- ✅ SLO baseline: 1,000 req at ~14 req/s — availability 1.0, p99 186ms, zero errors, zero alerts fired
+
+### Epoch F — Kubernetes & In-Cluster Observability
+- ✅ Layered Dockerfiles: Boot 4 tools-jarmode, non-root uid-1001, OTel agent staged via Gradle
+- ✅ All infra endpoints env-driven; Keycloak issuer-URI/JWK-set-URI independently overridable
+- ✅ Full Docker Compose stack (15 containers) smoke-verified end-to-end
+- ✅ kind cluster (Kubernetes 1.31.4 LTS) — all services running via Kustomize base
+- ✅ kube-prometheus-stack + Tempo + Loki + Promtail in-cluster; ServiceMonitor CRDs for all services
+- ✅ kafka-exporter v1.7.0: broker-side consumer lag (closes NaN-metric blind spot)
+- ✅ `KafkaBrokerConsumerLagHigh` PrometheusRule — 11 rules total in-cluster
+- ✅ Phase 8 exit gate: `OutboxPublishTerminalFailure` fired from a real condition, AM delivered, auto-resolved
+
+### Phase 9 — AI Service (in progress)
+- ✅ `ai-service` module: Spring AI 2.0 + Ollama (llama3.2) + PGVector
+- ✅ `POST /api/v1/ai/enrich` endpoint: generates personalized notification content via local LLM
+- ✅ Non-fatal enrichment client in notification-service (5s/30s timeouts, `Optional<String>` fallback)
+- ✅ Flyway V5 migration: `message TEXT` column on `notification_log`
+- ✅ Docker Compose wiring: Ollama + ai-service + `ensure-ai-db` init
+- ✅ Kubernetes manifests: Ollama StatefulSet + model-pull Job + ai-service Deployment/Service/ServiceMonitor
+- ✅ End-to-end smoke test in kind: HTTP 201 → Kafka consumed → AI enrichment → notification logged
+- 🚧 Ollama in-cluster activation (requires Docker Desktop ≥ 8GB; manifests committed, apply deferred)
+- 🚧 OTel spans for LLM calls (model latency visible in Tempo)
+- 🚧 notification-service Docker image rebuild with Phase 9 code baked in
+
+### Roadmap
+- 🔲 Phase 10 — Terraform + AWS EKS deployment
+- 🔲 Phase 11 — GitOps with ArgoCD
+- 🔲 Phase 12 — Chaos engineering (fault injection + game-day reports)
 
 ---
 
-## 🧠 Key Learnings
+## 🧠 Engineering Findings & Non-Obvious Decisions
 
-- Synchronous calls don’t scale in distributed systems
-- Event-driven architecture improves decoupling
-- Kafka provides at-least-once delivery — consumers must be idempotent
-- Failure handling is critical (Retry, DLQ, Idempotency)
-- Database constraints are essential for protecting against race conditions
-- Schema evolution is essential in microservices
+- **The outbox pattern alone is not enough.** After 5 publish retries, rows become terminal FAILED — silently. No retry, no alert, no visibility. The `outbox_failed` gauge existed, but no rule consumed it. The missing piece was not code — it was an alert. Lesson: a metric nobody alerts on is a decoration.
+- **Client-side Kafka lag metrics go blind on a dead consumer.** `records_lag_max` decays to NaN when a consumer stops fetching (it needs to fetch to report lag). The fix is not a better lag metric — it’s comparing event flow on both sides of the pipeline with absent-safe `unless` semantics.
+- **An untested alert is a hypothesis.** Every alert in this platform was verified by controlled failure injection before being trusted. Build time is 30 minutes; an alert that doesn’t fire when it should costs hours of incident response.
+- **Kafka spans were missing for 6 weeks due to a version skew, not a bug.** Spring Boot 4 upgraded to kafka-clients 4.x; the OTel agent (2.11.0) predated that version and skipped instrumentation silently. The correct response was to verify on the latest agent release *before* filing an upstream issue — which showed the gap was version-specific and already resolved.
+- **PostgreSQL `docker-entrypoint-initdb.d/` is a one-shot mechanism.** It only fires on the first start against an empty volume. For Kubernetes, where volumes persist across pod restarts and cluster recreations, a Kubernetes init container that runs idempotently on every pod start is the reliable pattern.
+- **Kind’s `ctr images import --all-platforms` fails for multi-arch images.** When only one platform blob is locally cached, it cannot find the manifests for the other platforms and fails with a content-digest error. The fix is to bypass kind’s wrapper and pipe directly into containerd without the `--all-platforms` flag.
+- **Keycloak in `start-dev` mode issues the `iss` claim based on the incoming request URL.** Port-forwarding to a different port changes the claim, breaking JWT validation at the gateway. The correct K8s testing pattern is to obtain tokens from inside the cluster where the internal DNS name matches the configured issuer URI.
 
 ---
 
-## 📈 Future Enhancements
+## 📈 Roadmap
 
-- Service Discovery (Eureka)
-- Fine-grained permission-based authorization
-- Rate Limiting
-- AWS EKS Deployment
-- Replace mock notifications with real email provider (AWS SES / SendGrid)
-- Enhance centralized logging with advanced Loki pipelines
-- Kafka messaging span instrumentation (OTel agent upgrade) to complete the asynchronous service-map edge and extend trace/log correlation to consumer and scheduler threads
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 1–6 | Event-driven foundation, observability, security, identity, tracing, resilience | ✅ Complete |
+| 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
+| 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
+| 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline | 🚧 In Progress |
+| 10 | Terraform — VPC, EKS, RDS, MSK modules | Planned |
+| 11 | GitOps — ArgoCD continuous deployment | Planned |
+| 12 | Chaos engineering — fault injection, game-day reports | Planned |
+
+**Standing improvements:**
+- Real notification channel (email via AWS SES / SendGrid) to replace log-simulated delivery
+- Service-to-service mTLS before cloud deployment
+- Virtual Threads load-test: empirical throughput comparison vs platform threads
 
 ---
 
