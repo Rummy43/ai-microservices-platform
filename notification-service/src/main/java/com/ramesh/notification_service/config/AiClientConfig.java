@@ -15,12 +15,12 @@ public class AiClientConfig {
     private String aiServiceUrl;
 
     @Bean
-    public RestClient aiRestClient(RestClient.Builder builder) {
+    public RestClient aiRestClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
-        factory.setReadTimeout(Duration.ofSeconds(30));
+        factory.setReadTimeout(Duration.ofSeconds(360));
 
-        return builder
+        return RestClient.builder()
                 .baseUrl(aiServiceUrl)
                 .requestFactory(factory)
                 .build();

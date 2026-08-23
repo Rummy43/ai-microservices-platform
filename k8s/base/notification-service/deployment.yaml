@@ -19,7 +19,7 @@ spec:
         command: ['sh', '-c', 'until nc -z postgres 5432; do echo "waiting for postgres"; sleep 3; done']
       containers:
       - name: notification-service
-        image: ai-platform/notification-service:1.6.0
+        image: ai-platform/notification-service:2.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8081

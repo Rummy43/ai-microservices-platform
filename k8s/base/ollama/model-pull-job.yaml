@@ -4,10 +4,10 @@ metadata:
   name: ollama-model-pull
   namespace: microservices
 spec:
-  # Cold pull of llama3.2 (2 GB) + nomic-embed-text (500 MB) can take 30+ min on a slow connection.
+  # Cold pull of llama3.2 (2 GB) + nomic-embed-text (500 MB) can take 60-90 min on a slow connection.
   # On repeat apply the Job exists but won't re-run — models are cached in the ollama-data PVC.
   # To force a re-pull: kubectl delete job ollama-model-pull -n microservices && kubectl apply -k k8s/base
-  activeDeadlineSeconds: 2400
+  activeDeadlineSeconds: 7200
   backoffLimit: 3
   ttlSecondsAfterFinished: 600
   template:
@@ -20,6 +20,7 @@ spec:
       containers:
       - name: pull-models
         image: ollama/ollama:latest
+        imagePullPolicy: Never
         env:
         - name: OLLAMA_HOST
           value: http://ollama:11434

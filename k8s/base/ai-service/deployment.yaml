@@ -26,10 +26,12 @@ spec:
         - sh
         - -c
         - |
-          PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres -tc \
-            "SELECT 1 FROM pg_database WHERE datname='ai_db'" | grep -q 1 \
-            || PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres \
-               -c "CREATE DATABASE ai_db; GRANT ALL PRIVILEGES ON DATABASE ai_db TO postgres;"
+          if ! PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres -tc \
+               "SELECT 1 FROM pg_database WHERE datname='ai_db'" | grep -q 1; then
+            PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres -c "CREATE DATABASE ai_db TEMPLATE template0;"
+            PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U postgres \
+              -c "GRANT ALL PRIVILEGES ON DATABASE ai_db TO postgres;"
+          fi
           echo "ai_db ready"
         env:
         - name: POSTGRES_PASSWORD
