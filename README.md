@@ -924,7 +924,7 @@ ai-service (:8083)
 
 ### Non-Fatal Design (ADR-020)
 
-`AiEnrichmentClient` wraps every call in try-catch and returns `Optional<String>`. A 5-second connect / 30-second read timeout prevents blocking the Kafka consumer thread beyond a bounded window. The caller uses `.orElse(FALLBACK_MESSAGE)`, so Kafka never retries and never DLT's due to AI latency or unavailability.
+`AiEnrichmentClient` wraps every call in try-catch and returns `Optional<String>`. A 5-second connect / 360-second read timeout accommodates Ollama's first-inference latency (llama3.2 weights load in ~168s on first cold request). The caller uses `.orElse(FALLBACK_MESSAGE)`, so Kafka never retries and never DLT's due to AI latency or unavailability. `OllamaWarmup` fires at startup so the load penalty is paid once — at deploy time, not on the first user event.
 
 ```java
 // The entire enrichment path — if anything throws, the consumer still ACKs
@@ -1075,14 +1075,16 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 ### Phase 9 — AI Service (in progress)
 - ✅ `ai-service` module: Spring AI 2.0 + Ollama (llama3.2) + PGVector
 - ✅ `POST /api/v1/ai/enrich` endpoint: generates personalized notification content via local LLM
-- ✅ Non-fatal enrichment client in notification-service (5s/30s timeouts, `Optional<String>` fallback)
+- ✅ Non-fatal enrichment client in notification-service (5s connect / 360s read timeout, `Optional<String>` fallback)
 - ✅ Flyway V5 migration: `message TEXT` column on `notification_log`
 - ✅ Docker Compose wiring: Ollama + ai-service + `ensure-ai-db` init
 - ✅ Kubernetes manifests: Ollama StatefulSet + model-pull Job + ai-service Deployment/Service/ServiceMonitor
-- ✅ End-to-end smoke test in kind: HTTP 201 → Kafka consumed → AI enrichment → notification logged
-- 🚧 Ollama in-cluster activation (requires Docker Desktop ≥ 8GB; manifests committed, apply deferred)
+- ✅ Ollama in-cluster activation: llama3.2 (2.0 GB) + nomic-embed-text (274 MB) pulled to PVC; cluster on 12 GB WSL2 VM
+- ✅ `OllamaWarmup`: fires `ApplicationReadyEvent` on a virtual thread to pre-load model weights before first user request
+- ✅ `keep-alive: -1m`: Ollama retains the model indefinitely (default 5-min eviction was re-incurring 168s reload on each user burst)
+- ✅ `notification-service:2.0.0` deployed in kind with Phase 9 AI enrichment path
+- ✅ End-to-end verified in kind: HTTP 201 → Kafka consumed → ai-service → llama3.2 → AI message persisted in `notification_log`
 - 🚧 OTel spans for LLM calls (model latency visible in Tempo)
-- 🚧 notification-service Docker image rebuild with Phase 9 code baked in
 
 ### Roadmap
 - 🔲 Phase 10 — Terraform + AWS EKS deployment
@@ -1100,6 +1102,9 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - **PostgreSQL `docker-entrypoint-initdb.d/` is a one-shot mechanism.** It only fires on the first start against an empty volume. For Kubernetes, where volumes persist across pod restarts and cluster recreations, a Kubernetes init container that runs idempotently on every pod start is the reliable pattern.
 - **Kind’s `ctr images import --all-platforms` fails for multi-arch images.** When only one platform blob is locally cached, it cannot find the manifests for the other platforms and fails with a content-digest error. The fix is to bypass kind’s wrapper and pipe directly into containerd without the `--all-platforms` flag.
 - **Keycloak in `start-dev` mode issues the `iss` claim based on the incoming request URL.** Port-forwarding to a different port changes the claim, breaking JWT validation at the gateway. The correct K8s testing pattern is to obtain tokens from inside the cluster where the internal DNS name matches the configured issuer URI.
+- **Ollama's default `keep_alive` is 5 minutes.** After 5 minutes of inactivity, Ollama evicts the model from memory. The next inference triggers a ~168-second reload — longer than the Kafka consumer's timeout. Fix: set `keep-alive: -1m` in Spring AI's `OllamaChatOptions` so the model stays loaded across request gaps.
+- **`latest` tag + `imagePullPolicy: IfNotPresent` in kind doesn't pick up rebuilt images.** Kubelet resolves the image once and caches the content reference; rebuilding the image under the same tag and re-importing via `ctr images import` doesn't invalidate the cache. Fix: use `kind load docker-image` which registers the new digest properly, and trigger a new rollout afterwards.
+- **Ollama's first-inference time is dominated by model weight loading, not generation.** A 2 GB llama3.2 model takes ~168s to load from disk into memory under WSL2 memory pressure. Designing for only generation latency (30s timeout) produces spurious fallbacks. `OllamaWarmup` fires at `ApplicationReadyEvent` on a virtual thread, paying this cost at deploy time and leaving the serving path fast.
 
 ---
 
@@ -1110,7 +1115,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 1–6 | Event-driven foundation, observability, security, identity, tracing, resilience | ✅ Complete |
 | 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
-| 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline | 🚧 In Progress |
+| 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | 🚧 In Progress |
 | 10 | Terraform — VPC, EKS, RDS, MSK modules | Planned |
 | 11 | GitOps — ArgoCD continuous deployment | Planned |
 | 12 | Chaos engineering — fault injection, game-day reports | Planned |
