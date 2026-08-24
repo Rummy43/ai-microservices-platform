@@ -37,6 +37,7 @@ spring:
         options:
           temperature: 0.3
           num-predict: 256
+          keep-alive: -1m
       embedding:
         model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
     vectorstore:
