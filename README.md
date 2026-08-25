@@ -1072,7 +1072,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ `KafkaBrokerConsumerLagHigh` PrometheusRule — 11 rules total in-cluster
 - ✅ Phase 8 exit gate: `OutboxPublishTerminalFailure` fired from a real condition, AM delivered, auto-resolved
 
-### Phase 9 — AI Service (in progress)
+### Phase 9 — AI Service ✅ CLOSED 2026-08-24
 - ✅ `ai-service` module: Spring AI 2.0 + Ollama (llama3.2) + PGVector
 - ✅ `POST /api/v1/ai/enrich` endpoint: generates personalized notification content via local LLM
 - ✅ Non-fatal enrichment client in notification-service (5s connect / 360s read timeout, `Optional<String>` fallback)
@@ -1084,7 +1084,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ `keep-alive: -1m`: Ollama retains the model indefinitely (default 5-min eviction was re-incurring 168s reload on each user burst)
 - ✅ `notification-service:2.0.0` deployed in kind with Phase 9 AI enrichment path
 - ✅ End-to-end verified in kind: HTTP 201 → Kafka consumed → ai-service → llama3.2 → AI message persisted in `notification_log`
-- 🚧 OTel spans for LLM calls (model latency visible in Tempo)
+- ✅ **Exit gate PASS**: 31 OTel spans across 3 services (user-service + notification-service + ai-service) in Grafana Tempo — LLM inference call (23.8s) visible as a child span; Kafka trace context propagated end-to-end via OTel W3C headers
 
 ### Roadmap
 - 🔲 Phase 10 — Terraform + AWS EKS deployment
