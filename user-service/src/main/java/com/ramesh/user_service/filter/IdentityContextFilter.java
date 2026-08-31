@@ -1,6 +1,5 @@
 package com.ramesh.user_service.filter;
 
-import com.ramesh.user_service.common.CorrelationConstants;
 import com.ramesh.user_service.common.IdentityHeaders;
 import com.ramesh.user_service.identity.IdentityContext;
 import com.ramesh.user_service.identity.IdentityContextHolder;
@@ -31,9 +30,8 @@ import java.util.List;
  *       logback {@code <mdc/>} provider emits them as JSON).</li>
  * </ul>
  *
- * <p>Runs after {@link CorrelationIdFilter} so the {@code traceId} is already in
- * MDC. Both the holder and MDC entries are cleared in {@code finally} to prevent
- * cross-request leakage.
+ * <p>Both the holder and MDC entries are cleared in {@code finally} to prevent
+ * cross-request leakage. The OTel agent injects {@code trace_id} into MDC.
  */
 @Component
 @Slf4j
@@ -60,7 +58,7 @@ public class IdentityContextFilter extends OncePerRequestFilter {
                         identity.username(),
                         identity.email(),
                         identity.rolesAsString(),
-                        MDC.get(CorrelationConstants.TRACE_ID));
+                        MDC.get("trace_id"));
             }
 
             filterChain.doFilter(request, response);

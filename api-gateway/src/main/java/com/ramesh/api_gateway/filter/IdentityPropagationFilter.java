@@ -26,10 +26,9 @@ import java.io.IOException;
  * services as HTTP headers ({@code X-User-Name}, {@code X-User-Email},
  * {@code X-User-Roles}).
  *
- * <p>Runs after Spring Security (which authenticates the request) and after
- * {@link CorrelationIdFilter} (so the correlation id is available for logging).
- * It reads the already-validated {@link Jwt} from the security context — it does
- * not re-validate the token.
+ * <p>Runs after Spring Security (which authenticates the request). Reads the
+ * already-validated {@link Jwt} from the security context — does not re-validate
+ * the token. The OTel agent injects {@code trace_id} into MDC for log correlation.
  *
  * <p>The three identity headers are always overwritten, even when a claim is
  * absent, so a client cannot spoof its own identity by setting these headers.
@@ -71,7 +70,7 @@ public class IdentityPropagationFilter extends OncePerRequestFilter {
                 identity.username(),
                 identity.email(),
                 roles,
-                MDC.get(CorrelationIdFilter.TRACE_ID));
+                MDC.get("trace_id"));
 
         filterChain.doFilter(enrichedRequest, response);
     }

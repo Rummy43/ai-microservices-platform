@@ -1,6 +1,5 @@
 package com.ramesh.notification_service.filter;
 
-import com.ramesh.notification_service.common.CorrelationConstants;
 import com.ramesh.notification_service.common.IdentityHeaders;
 import com.ramesh.notification_service.identity.IdentityContext;
 import com.ramesh.notification_service.identity.IdentityContextHolder;
@@ -61,7 +60,7 @@ public class IdentityContextFilter extends OncePerRequestFilter {
                         identity.username(),
                         identity.email(),
                         identity.rolesAsString(),
-                        MDC.get(CorrelationConstants.TRACE_ID));
+                        MDC.get("trace_id"));
             }
 
             filterChain.doFilter(request, response);
