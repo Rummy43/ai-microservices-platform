@@ -192,6 +192,7 @@ notification_log / dead_letter_events (actor persisted)
 | 5 | [Your Service Map Is Lying: Verifying OpenTelemetry Auto-Instrumentation](https://medium.com/@yara.ramesh/your-service-map-is-lying-cfc84fb38990) | OpenTelemetry, service graph, Kafka spans, verify-don't-assume |
 | 6 | [Who Did This? Identity Across Async Boundaries](https://medium.com/@yara.ramesh/who-did-this-identity-across-async-boundaries-823c712b073f) | Identity propagation, audit context, Kafka headers, dead-letter attribution |
 | 7 | [The Outbox Pattern Is Not Enough](https://medium.com/@yara.ramesh/the-outbox-pattern-is-not-enough-07c4fe231296) | Outbox failure modes, terminal FAILED rows, alerting blind spots, SLO design |
+| 8 | [Five Things Kubernetes Quietly Added to My Containers (And How Each One Broke a Confluent Service)](https://medium.com/@yara.ramesh/five-things-kubernetes-quietly-added-to-my-containers-and-how-each-one-broke-a-confluent-service-972d621916fd) | Kubernetes defaults, Confluent deployment, `enableServiceLinks`, probe design, rolling update strategy |
 
 ---
 
@@ -468,41 +469,31 @@ http://localhost:9080
 
 ## 🔍 Distributed Request Tracing
 
-The platform supports end-to-end request traceability across synchronous HTTP requests and asynchronous Kafka event flows using correlation IDs and MDC-based logging.
+End-to-end request traceability is provided by the **OpenTelemetry Java Agent** (zero application code changes). Every HTTP request, JDBC call, and Kafka producer/consumer span is instrumented automatically; W3C `traceparent` propagates context across service and topic boundaries. The custom `CorrelationIdFilter` that pre-dated OTel was retired (commit `6dd4229`, 2026-08-30) once OTel agent 2.28.1 closed the Kafka span gap.
 
 ### Tracing Flow
 
 ```text
 Incoming HTTP Request
         ↓
-API Gateway
+API Gateway (OTel agent — root HTTP span, W3C traceparent injected)
         ↓
-Gateway Correlation Filter
+User Service (child HTTP span + JDBC span; traceparent in Kafka message headers)
         ↓
-User Service Logs
+Kafka Topic (W3C traceparent in message headers)
         ↓
-Kafka Event Headers
+Notification Service (consumer span linked to producer span via traceparent)
         ↓
-Notification Service Consumer
-        ↓
-Notification Processing Logs
+ai-service (HTTP child span → Ollama inference child span)
 ```
 
 ### Features
 
-- Correlation ID generation using `X-Correlation-Id`
-- MDC-based contextual logging
-- Kafka header trace propagation
-- End-to-end trace visibility across services
-- Thread-safe MDC cleanup for Kafka consumers
-- Actor identity (`username`, `email`, `roles`) propagated alongside the trace ID
-
-### Example Trace
-
-```text
-[user-service,traceId:trace-kafka-123]
-[notification-service,traceId:trace-kafka-123]
-```
+- Zero-code instrumentation via OTel Java Agent 2.28.1 (HTTP, JDBC, Kafka)
+- W3C `traceparent` propagation across HTTP hops and Kafka boundaries
+- `traceId`/`spanId` injected into MDC — every structured log line carries trace context
+- Full async hop visible in Tempo: producer span → Kafka headers → consumer span → LLM span
+- Actor identity (`username`, `email`, `roles`) propagated alongside trace ID via Kafka headers
 
 ---
 
@@ -858,7 +849,7 @@ The platform runs in a local **kind cluster** (Kubernetes 1.31.4 LTS) using **Ku
 | schema-registry | `confluentinc/cp-schema-registry:7.5.0` | `strategy: Recreate` (single-replica rolling-update is fatal) |
 | mysql | `mysql:8.0` | User service DB |
 | postgres | `pgvector/pgvector:pg17` | notification + ai databases |
-| keycloak | `quay.io/keycloak/keycloak:25.0` | Realm auto-imported from `docker/keycloak/ai-microservices-realm.json` |
+| keycloak | `quay.io/keycloak/keycloak:26.2` | Realm auto-imported via `--import-realm`; readiness probed on `/realms/ai-microservices:8080` (start-dev only exposes port 8080, not the management port 9000) |
 | kafka-exporter | `danielqsj/kafka-exporter:v1.7.0` | Broker-side consumer lag |
 | kube-prometheus-stack | Helm 88.x | Prometheus Operator + Grafana + Alertmanager |
 | Tempo | Helm 2.9.0 | Distributed tracing + service-graph |
@@ -1087,9 +1078,8 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ **Exit gate PASS**: 31 OTel spans across 3 services (user-service + notification-service + ai-service) in Grafana Tempo — LLM inference call (23.8s) visible as a child span; Kafka trace context propagated end-to-end via OTel W3C headers
 
 ### Roadmap
-- 🔲 Phase 10 — Terraform + AWS EKS deployment
-- 🔲 Phase 11 — GitOps with ArgoCD
-- 🔲 Phase 12 — Chaos engineering (fault injection + game-day reports)
+- 🔲 Phase 10 — AWS EKS via Terraform (MSK Serverless, IRSA, External Secrets Operator, ArgoCD GitOps, S3-backed Tempo/Loki) — planned Q4 2026
+- 🔲 Phase 11 — Chaos engineering (fault injection, steady-state hypothesis, game-day reports)
 
 ---
 
@@ -1115,10 +1105,9 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 1–6 | Event-driven foundation, observability, security, identity, tracing, resilience | ✅ Complete |
 | 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
-| 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | 🚧 In Progress |
-| 10 | Terraform — VPC, EKS, RDS, MSK modules | Planned |
-| 11 | GitOps — ArgoCD continuous deployment | Planned |
-| 12 | Chaos engineering — fault injection, game-day reports | Planned |
+| 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | ✅ Complete (2026-08-24) |
+| 10 | AWS EKS via Terraform — VPC/EKS provisioning, MSK Serverless, IRSA + External Secrets Operator, ArgoCD GitOps, S3-backed observability (Tempo/Loki) | Planned Q4 2026 |
+| 11 | Chaos engineering — fault injection, steady-state hypothesis, game-day reports | Planned |
 
 **Standing improvements:**
 - Real notification channel (email via AWS SES / SendGrid) to replace log-simulated delivery
