@@ -1077,8 +1077,19 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ End-to-end verified in kind: HTTP 201 → Kafka consumed → ai-service → llama3.2 → AI message persisted in `notification_log`
 - ✅ **Exit gate PASS**: 31 OTel spans across 3 services (user-service + notification-service + ai-service) in Grafana Tempo — LLM inference call (23.8s) visible as a child span; Kafka trace context propagated end-to-end via OTel W3C headers
 
+### Phase 10 — AWS EKS via Terraform 🚧 IN PROGRESS (2026-09-18)
+- ✅ Terraform scaffold: 5 production modules (vpc, eks, rds, msk, ecr) + S3 remote state backend with native locking (`use_lockfile = true`)
+- ✅ Full `terraform apply` clean: VPC + 4 subnets (2 public / 2 private, 2 AZs) + NAT GW + IGW
+- ✅ EKS cluster `ai-platform-prod` (k8s 1.31) **Active** — OIDC provider for IRSA, 2× SPOT t3.medium nodes **Ready**
+- ✅ RDS MySQL 8.0 (`user-service`) + PostgreSQL 17 (`notification-service` + Keycloak) — both **Available**, private subnets only
+- ✅ MSK Serverless **Active** — SASL/IAM auth, bootstrap broker `boot-yxnxm9q2.c1.kafka-serverless.us-east-1.amazonaws.com:9098`
+- ✅ ECR: 4 private repos (user-service, notification-service, api-gateway, ai-service) — AES-256 + lifecycle policies
+- ✅ kubectl connected — 6 system pods Running
+- 🔲 Kustomize `overlays/prod`, External Secrets Operator, service deployment to EKS
+- 🔲 End-to-end smoke test through public HTTPS ALB
+- 🔲 Observability migration: Tempo/Loki on EKS with S3 backend, Alertmanager → SES
+
 ### Roadmap
-- 🔲 Phase 10 — AWS EKS via Terraform (MSK Serverless, IRSA, External Secrets Operator, ArgoCD GitOps, S3-backed Tempo/Loki) — planned Q4 2026
 - 🔲 Phase 11 — Chaos engineering (fault injection, steady-state hypothesis, game-day reports)
 
 ---
@@ -1106,7 +1117,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
 | 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | ✅ Complete (2026-08-24) |
-| 10 | AWS EKS via Terraform — VPC/EKS provisioning, MSK Serverless, IRSA + External Secrets Operator, ArgoCD GitOps, S3-backed observability (Tempo/Loki) | Planned Q4 2026 |
+| 10 | AWS EKS via Terraform — VPC/EKS/RDS/MSK/ECR live in us-east-1; 2× SPOT nodes Ready; kubectl connected | 🚧 In Progress (Epoch H ✅, Epoch I next) |
 | 11 | Chaos engineering — fault injection, steady-state hypothesis, game-day reports | Planned |
 
 **Standing improvements:**
