@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: schema-registry
+  template:
+    metadata:
+      labels:
+        app: schema-registry
+    spec:
+      serviceAccountName: kafka-client-sa
+      # Confluent dub crashes if K8s injects SCHEMA_REGISTRY_PORT=tcp://... from the service
+      enableServiceLinks: false
+      containers:
+      - name: schema-registry
+        image: 922024167800.dkr.ecr.us-east-1.amazonaws.com/ai-platform/schema-registry:7.5.0-msk
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+        env:
+        - name: SCHEMA_REGISTRY_HOST_NAME
+          value: schema-registry
+        - name: SCHEMA_REGISTRY_LISTENERS
+          value: http://0.0.0.0:8081
+        - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
+          value: boot-yxnxm9q2.c1.kafka-serverless.us-east-1.amazonaws.com:9098
+        - name: SCHEMA_REGISTRY_KAFKASTORE_SECURITY_PROTOCOL
+          value: SASL_SSL
+        - name: SCHEMA_REGISTRY_KAFKASTORE_SASL_MECHANISM
+          value: AWS_MSK_IAM
+        - name: SCHEMA_REGISTRY_KAFKASTORE_SASL_JAAS_CONFIG
+          value: "software.amazon.msk.auth.iam.IAMLoginModule required;"
+        - name: SCHEMA_REGISTRY_KAFKASTORE_SASL_CLIENT_CALLBACK_HANDLER_CLASS
+          value: software.amazon.msk.auth.iam.IAMClientCallbackHandler
+        startupProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          failureThreshold: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /subjects
+            port: 8081
+          periodSeconds: 15
+          failureThreshold: 3
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 100m
+          limits:
+            memory: 768Mi
+            cpu: 500m
+        volumeMounts:
+        # Override the Confluent ensure (preflight) script with a no-op.
+        # kafka-ready uses its own classpath tool that cannot find the MSK IAM auth
+        # class even though the JAR is baked into /usr/share/java/schema-registry/.
+        - name: ensure-override
+          mountPath: /etc/confluent/docker/ensure
+          subPath: ensure
+      volumes:
+      - name: ensure-override
+        configMap:
+          name: schema-registry-ensure-override
+          defaultMode: 0755

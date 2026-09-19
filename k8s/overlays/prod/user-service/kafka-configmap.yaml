@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-prod-config
+  namespace: microservices
+data:
+  # Loaded via SPRING_CONFIG_ADDITIONAL_LOCATION=file:/config/
+  # Properties here override application.properties from the JAR.
+  # Dot-notation is required for spring.kafka.properties.* — env var binding
+  # cannot represent dots in map keys (Spring relaxed binding converts _ to dot
+  # only for known properties, not arbitrary map entries).
+  application.properties: |
+    spring.datasource.url=jdbc:mysql://ai-platform-prod-mysql.cifqagsacu3i.us-east-1.rds.amazonaws.com:3306/userdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    spring.kafka.bootstrap-servers=boot-yxnxm9q2.c1.kafka-serverless.us-east-1.amazonaws.com:9098
+    spring.kafka.properties.security.protocol=SASL_SSL
+    spring.kafka.properties.sasl.mechanism=AWS_MSK_IAM
+    spring.kafka.properties.sasl.jaas.config=software.amazon.msk.auth.iam.IAMLoginModule required;
+    spring.kafka.properties.sasl.client.callback.handler.class=software.amazon.msk.auth.iam.IAMClientCallbackHandler
+    spring.kafka.properties.schema.registry.url=http://schema-registry:8081

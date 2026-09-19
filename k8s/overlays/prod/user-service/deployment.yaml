@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      serviceAccountName: kafka-client-sa
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z ai-platform-prod-mysql.cifqagsacu3i.us-east-1.rds.amazonaws.com 3306; do echo "waiting for RDS MySQL"; sleep 5; done']
+      - name: release-liquibase-lock
+        image: mysql:8.0
+        command:
+        - sh
+        - -c
+        - |
+          mysql -u "$DB_USERNAME" -p"$DB_PASSWORD" -h ai-platform-prod-mysql.cifqagsacu3i.us-east-1.rds.amazonaws.com userdb \
+            -e "UPDATE DATABASECHANGELOGLOCK SET LOCKED=0, LOCKGRANTED=NULL, LOCKEDBY=NULL \
+                WHERE ID=1 AND LOCKED=1 AND LOCKGRANTED < NOW() - INTERVAL 5 MINUTE;" \
+            2>/dev/null; echo "Liquibase lock check done"
+        env:
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: db-password
+      - name: wait-for-schema-registry
+        image: busybox:1.36
+        command: ['sh', '-c', 'until wget -q -O /dev/null http://schema-registry:8081/subjects; do echo "waiting for schema-registry"; sleep 5; done']
+      containers:
+      - name: user-service
+        image: 922024167800.dkr.ecr.us-east-1.amazonaws.com/ai-platform/user-service:1.6.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DB_HOST
+          value: ai-platform-prod-mysql.cifqagsacu3i.us-east-1.rds.amazonaws.com
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_NAME
+          value: userdb
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: db-password
+        - name: SCHEMA_REGISTRY_URL
+          value: http://schema-registry:8081
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://tempo.monitoring:4318
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
+        # Mounts application.properties overlay — sets MSK SASL/IAM properties with dots
+        - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+          value: "optional:file:/config/"
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          failureThreshold: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          periodSeconds: 30
+          failureThreshold: 3
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 100m
+          limits:
+            memory: 768Mi
+            cpu: 500m
+        volumeMounts:
+        - name: prod-config
+          mountPath: /config
+          readOnly: true
+      volumes:
+      - name: prod-config
+        configMap:
+          name: user-service-prod-config

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: schema-registry-ensure-override
+  namespace: microservices
+data:
+  ensure: |
+    #!/bin/bash
+    # kafka-ready preflight skipped: MSK IAM auth JAR is baked into the image.
+    # The ensure step's kafka-ready uses a separate classpath tool that cannot
+    # find the IAMClientCallbackHandler even when the JAR is present in
+    # /usr/share/java/schema-registry/. The main schema-registry process starts
+    # fine — skipping this check is safe when MSK connectivity is known-good.
+    echo "==> ensure: preflight skipped (MSK IAM — kafka-ready classpath limitation)"

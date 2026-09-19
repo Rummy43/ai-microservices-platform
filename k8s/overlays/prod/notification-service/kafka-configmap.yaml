@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-service-prod-config
+  namespace: microservices
+data:
+  application.yaml: |
+    spring:
+      datasource:
+        url: jdbc:postgresql://ai-platform-prod-postgres.cifqagsacu3i.us-east-1.rds.amazonaws.com:5432/notificationdb
+      kafka:
+        bootstrap-servers: boot-yxnxm9q2.c1.kafka-serverless.us-east-1.amazonaws.com:9098
+        properties:
+          security.protocol: SASL_SSL
+          sasl.mechanism: AWS_MSK_IAM
+          sasl.jaas.config: "software.amazon.msk.auth.iam.IAMLoginModule required;"
+          sasl.client.callback.handler.class: software.amazon.msk.auth.iam.IAMClientCallbackHandler
+          schema.registry.url: http://schema-registry:8081
