@@ -307,7 +307,7 @@ Notification Service (PostgreSQL)
 - Docker + Docker Compose (full 15-container stack)
 - Kubernetes (kind cluster, Kustomize base/overlays — `k8s/base/`)
 - Helm (kube-prometheus-stack, Tempo, Loki, Promtail)
-- Terraform + AWS EKS (Phase 10, roadmap)
+- Terraform + AWS EKS (Phase 10 — Kustomize prod overlays, ALB, MSK Serverless SASL/IAM, IRSA)
 - GitHub Actions (CI)
 
 ### Observability
@@ -1077,17 +1077,21 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ End-to-end verified in kind: HTTP 201 → Kafka consumed → ai-service → llama3.2 → AI message persisted in `notification_log`
 - ✅ **Exit gate PASS**: 31 OTel spans across 3 services (user-service + notification-service + ai-service) in Grafana Tempo — LLM inference call (23.8s) visible as a child span; Kafka trace context propagated end-to-end via OTel W3C headers
 
-### Phase 10 — AWS EKS via Terraform 🚧 IN PROGRESS (2026-09-18)
+### Phase 10 — AWS EKS via Terraform ✅ FIRST DEPLOYMENT RUN COMPLETE (2026-09-18)
 - ✅ Terraform scaffold: 5 production modules (vpc, eks, rds, msk, ecr) + S3 remote state backend with native locking (`use_lockfile = true`)
 - ✅ Full `terraform apply` clean: VPC + 4 subnets (2 public / 2 private, 2 AZs) + NAT GW + IGW
 - ✅ EKS cluster `ai-platform-prod` (k8s 1.31) **Active** — OIDC provider for IRSA, 2× SPOT t3.medium nodes **Ready**
 - ✅ RDS MySQL 8.0 (`user-service`) + PostgreSQL 17 (`notification-service` + Keycloak) — both **Available**, private subnets only
-- ✅ MSK Serverless **Active** — SASL/IAM auth, bootstrap broker `boot-yxnxm9q2.c1.kafka-serverless.us-east-1.amazonaws.com:9098`
+- ✅ MSK Serverless **Active** — SASL/IAM auth, bootstrap broker endpoint configured
 - ✅ ECR: 4 private repos (user-service, notification-service, api-gateway, ai-service) — AES-256 + lifecycle policies
-- ✅ kubectl connected — 6 system pods Running
-- 🔲 Kustomize `overlays/prod`, External Secrets Operator, service deployment to EKS
-- 🔲 End-to-end smoke test through public HTTPS ALB
+- ✅ **Kustomize `overlays/prod`** — standalone self-contained overlay (no base inheritance); schema-registry, keycloak, user-service, notification-service, api-gateway + ALB ingress
+- ✅ **All 3 services + schema-registry + keycloak deployed to EKS** — 5/5 pods Running in `microservices` namespace
+- ✅ **Custom schema-registry Docker image** — Confluent 7.5.0 + MSK IAM auth JAR baked in (Confluent hardcodes classpath; env var injection does not work)
+- ✅ **AWS ALB provisioned** via AWS Load Balancer Controller (IRSA) — Internet-facing, 2 AZs, Active
+- ✅ **End-to-end smoke test PASS** — `POST /api/v1/users` 201 Created through ALB; `UserCreatedEvent` delivered to notification-service via MSK Serverless
+- ✅ Resources decommissioned after evidence capture (`terraform destroy`) — ~$22-28 total cost for full deployment run
 - 🔲 Observability migration: Tempo/Loki on EKS with S3 backend, Alertmanager → SES
+- 🔲 GitOps with ArgoCD (Phase 11)
 
 ### Roadmap
 - 🔲 Phase 11 — Chaos engineering (fault injection, steady-state hypothesis, game-day reports)
@@ -1117,7 +1121,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
 | 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | ✅ Complete (2026-08-24) |
-| 10 | AWS EKS via Terraform — VPC/EKS/RDS/MSK/ECR live in us-east-1; 2× SPOT nodes Ready; kubectl connected | 🚧 In Progress (Epoch H ✅, Epoch I next) |
+| 10 | AWS EKS via Terraform — full deploy: VPC/EKS/RDS/MSK/ECR + 5 pods Running + ALB smoke test PASS | ✅ First deployment run complete (2026-09-18) |
 | 11 | Chaos engineering — fault injection, steady-state hypothesis, game-day reports | Planned |
 
 **Standing improvements:**
