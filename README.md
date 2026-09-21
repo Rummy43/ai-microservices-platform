@@ -891,6 +891,49 @@ Five structural failure modes were discovered and resolved during cluster bringu
 
 ---
 
+## ☁️ AWS EKS Deployment (Phase 10)
+
+The platform was deployed to AWS using Terraform, demonstrating a full production cloud deployment with managed AWS services replacing local Docker Compose infrastructure.
+
+### Infrastructure Provisioned
+
+| Component | AWS Service | Notes |
+|-----------|-------------|-------|
+| Container orchestration | EKS 1.31 (SPOT t3.medium, 2 nodes) | OIDC provider for IRSA |
+| Message broker | MSK Serverless | SASL/IAM auth — no cluster management overhead |
+| Relational databases | RDS MySQL 8.0 + PostgreSQL 17 | Private subnets only |
+| Container registry | ECR (4 private repos) | AES-256 encryption + lifecycle policies |
+| Load balancer | ALB (AWS Load Balancer Controller) | Internet-facing, IRSA-provisioned |
+| State backend | S3 + native lock file | `use_lockfile = true` — no DynamoDB needed |
+
+### Key Engineering Decisions
+
+- **Custom schema-registry image** — Confluent 7.5.0 + MSK IAM auth JAR baked in; `CLASSPATH` env var injection does not work (Confluent hardcodes the classpath in shell scripts)
+- **Kustomize `overlays/prod`** — fully self-contained overlay (no base inheritance) for clean cloud/local separation
+- **`strategy: Recreate` on schema-registry** — rolling update creates two concurrent pods in the same Kafka consumer group, triggering a fatal `LEADER_NOT_AVAILABLE` rebalance; Recreate eliminates the overlap window
+- **Destroy after evidence capture** — EKS has no free tier ($0.10/hr mandatory); full deployment run costs ~$22-28; S3 state backend left standing (~$0.01/month)
+
+### Deployment Evidence
+
+AWS console screenshots captured during the Phase 10 run:
+
+![EKS Cluster Active](images/linkedin/phase10-eks-cluster-active-public.jpg)
+*EKS cluster `ai-platform-prod` active — Kubernetes 1.31, OIDC enabled*
+
+![5 Services Running on EKS](images/linkedin/phase10-eks-5services-all-running-public.jpg)
+*All 5 pods Running in the `microservices` namespace (schema-registry, keycloak, user-service, notification-service, api-gateway)*
+
+![RDS MySQL and PostgreSQL Available](images/linkedin/phase10-rds-mysql-postgres-available-public.jpg)
+*RDS MySQL 8.0 (user-service) + PostgreSQL 17 (notification-service + Keycloak) — both Available, private subnets*
+
+![MSK Serverless Active](images/linkedin/phase10-msk-serverless-active-public.jpg)
+*MSK Serverless cluster active — SASL/IAM authentication, no broker management*
+
+![ECR Repositories](images/linkedin/phase10-ecr-repos-confirmed-public.jpg)
+*ECR private repositories — 4 repos with AES-256 encryption and lifecycle policies*
+
+---
+
 ## 🤖 AI Service (Spring AI + Ollama + PGVector)
 
 The `ai-service` module adds an LLM enrichment stage to the event-processing pipeline. It is designed as a **non-blocking, non-fatal dependency**: if it is unavailable, the Kafka consumer falls back silently and event processing continues unaffected.
