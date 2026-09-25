@@ -905,6 +905,9 @@ The platform was deployed to AWS using Terraform, demonstrating a full productio
 | Container registry | ECR (4 private repos) | AES-256 encryption + lifecycle policies |
 | Load balancer | ALB (AWS Load Balancer Controller) | Internet-facing, IRSA-provisioned |
 | State backend | S3 + native lock file | `use_lockfile = true` — no DynamoDB needed |
+| Trace storage | S3 (`*-tempo-traces`) | AES-256; Tempo IRSA-scoped write access (Epoch J) |
+| Log storage | S3 (`*-loki-chunks`) | AES-256; Loki IRSA-scoped write access (Epoch J) |
+| Alert delivery | AWS SES (SMTP) | Alertmanager → SES email via IAM SMTP user (Epoch J) |
 
 ### Key Engineering Decisions
 
@@ -1120,7 +1123,9 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ End-to-end verified in kind: HTTP 201 → Kafka consumed → ai-service → llama3.2 → AI message persisted in `notification_log`
 - ✅ **Exit gate PASS**: 31 OTel spans across 3 services (user-service + notification-service + ai-service) in Grafana Tempo — LLM inference call (23.8s) visible as a child span; Kafka trace context propagated end-to-end via OTel W3C headers
 
-### Phase 10 — AWS EKS via Terraform ✅ FIRST DEPLOYMENT RUN COMPLETE (2026-09-18)
+### Phase 10 — AWS EKS via Terraform ✅ EPOCH I COMPLETE (2026-09-18) | EPOCH J CODED (2026-09-25)
+
+#### Epoch I — AWS Foundation + EKS Workload Migration
 - ✅ Terraform scaffold: 5 production modules (vpc, eks, rds, msk, ecr) + S3 remote state backend with native locking (`use_lockfile = true`)
 - ✅ Full `terraform apply` clean: VPC + 4 subnets (2 public / 2 private, 2 AZs) + NAT GW + IGW
 - ✅ EKS cluster `ai-platform-prod` (k8s 1.31) **Active** — OIDC provider for IRSA, 2× SPOT t3.medium nodes **Ready**
@@ -1133,8 +1138,18 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ **AWS ALB provisioned** via AWS Load Balancer Controller (IRSA) — Internet-facing, 2 AZs, Active
 - ✅ **End-to-end smoke test PASS** — `POST /api/v1/users` 201 Created through ALB; `UserCreatedEvent` delivered to notification-service via MSK Serverless
 - ✅ Resources decommissioned after evidence capture (`terraform destroy`) — ~$22-28 total cost for full deployment run
-- 🔲 Observability migration: Tempo/Loki on EKS with S3 backend, Alertmanager → SES
-- 🔲 GitOps with ArgoCD (Phase 11)
+
+#### Epoch J — Production Observability on EKS (coded 2026-09-25, AWS spin-up pending)
+- ✅ **`terraform/modules/observability/`** — S3 buckets for Tempo traces + Loki chunks (AES256, `force_destroy`); IRSA roles scoped per workload (`system:serviceaccount:monitoring:tempo` / `monitoring:loki`); SES email identity + SMTP IAM user with `ses_smtp_password_v4`
+- ✅ **Helm EKS overlays** (`-f values.yaml -f values-eks.yaml` pattern):
+  - `k8s/helm/tempo/values-eks.yaml` — S3 trace backend, gp3 WAL PVC, IRSA ServiceAccount annotation placeholder
+  - `k8s/helm/loki/values-eks.yaml` — S3 storage type, gp3 PVC, IRSA ServiceAccount annotation placeholder
+  - `k8s/helm/kube-prometheus-stack/values-eks.yaml` — Alertmanager SMTP file-mount (`smtp_auth_password_file`), SES smarthost `email-smtp.us-east-1.amazonaws.com:587`, critical/warn severity routing, Prometheus 7d retention on 20Gi gp3 PVC
+- ✅ **`k8s/overlays/prod/observability/storageclass-gp3.yaml`** — gp3 EBS StorageClass (3000 IOPS, 125 MiB/s, `WaitForFirstConsumer`, default), replacing EKS's gp2
+- ✅ **`k8s/overlays/prod/observability/alertmanager-config.yaml`** — `AlertmanagerConfig` CR routing `namespace=microservices` alerts to SES email receiver
+- ✅ **`k8s/overlays/prod/observability/alertmanager-smtp-secret.yaml`** — placeholder only; credentials injected at deploy time via `terraform output -raw` (never committed to git)
+- ✅ `terraform validate` PASS on full module graph
+- 🔲 AWS spin-up + exit gate: FAILED outbox row → SES email delivery → auto-resolve
 
 ### Roadmap
 - 🔲 Phase 11 — Chaos engineering (fault injection, steady-state hypothesis, game-day reports)
@@ -1164,7 +1179,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
 | 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | ✅ Complete (2026-08-24) |
-| 10 | AWS EKS via Terraform — full deploy: VPC/EKS/RDS/MSK/ECR + 5 pods Running + ALB smoke test PASS | ✅ First deployment run complete (2026-09-18) |
+| 10 | AWS EKS via Terraform — VPC/EKS/RDS/MSK/ECR + 5 pods on EKS + ALB PASS (Epoch I); S3-backed Tempo/Loki + Alertmanager→SES (Epoch J coded) | ✅ Epoch I complete (2026-09-18); Epoch J coded (2026-09-25) |
 | 11 | Chaos engineering — fault injection, steady-state hypothesis, game-day reports | Planned |
 
 **Standing improvements:**
