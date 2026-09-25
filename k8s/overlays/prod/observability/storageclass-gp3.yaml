@@ -1,0 +1,19 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    # Make gp3 the default StorageClass so PVCs without an explicit class use it.
+    # EKS ships with gp2 as default; this annotation moves the default to gp3.
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  # gp3 baseline: 3000 IOPS and 125 MiB/s throughput at no extra cost vs gp2.
+  # These can be raised for Prometheus workloads if write latency becomes a concern.
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer   # only provision EBS when a pod is scheduled (AZ-aware)
+allowVolumeExpansion: true
+reclaimPolicy: Delete

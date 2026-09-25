@@ -1,0 +1,48 @@
+# Grafana Tempo — EKS overlay (S3 backend)
+# Usage: helm install tempo grafana/tempo -f values.yaml -f values-eks.yaml \
+#          --set tempo.storage.trace.s3.bucket=<bucket> \
+#          --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=<irsa-arn>
+#
+# This file overrides only what differs from the local kind values.yaml.
+# The base file provides: receivers, metricsGenerator, overrides, resources, serviceMonitor.
+
+tempo:
+  storage:
+    trace:
+      # S3 replaces the local filesystem backend.
+      # Bucket name and IRSA role ARN are injected via --set at deploy time
+      # so they don't need to be committed (terraform output provides them).
+      backend: s3
+      s3:
+        region: us-east-1
+        endpoint: s3.us-east-1.amazonaws.com
+        # bucket: injected via --set tempo.storage.trace.s3.bucket=<name>
+      wal:
+        path: /var/tempo/wal
+
+  metricsGenerator:
+    storage:
+      path: "/var/tempo/metrics"
+    traces_storage:
+      path: "/var/tempo/traces_wal"
+
+  # Update cluster label for EKS environment
+  metricsGenerator:
+    registry:
+      external_labels:
+        cluster: eks-ai-platform
+
+# IRSA ServiceAccount — IAM role ARN injected via --set at deploy time
+serviceAccount:
+  create: true
+  name: tempo
+  annotations: {}
+  # eks.amazonaws.com/role-arn: injected via --set
+
+# WAL PVC only — trace data goes to S3 (no large local storage needed)
+persistence:
+  enabled: true
+  storageClassName: gp3
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi

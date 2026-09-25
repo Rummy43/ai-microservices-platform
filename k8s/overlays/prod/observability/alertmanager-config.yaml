@@ -1,0 +1,46 @@
+# AlertmanagerConfig CR — wires OutboxPublishTerminalFailure to the SES email receiver.
+# This CRD is picked up by Prometheus Operator via the alertmanagerConfigSelector.
+# The matching receiver must be declared in the base alertmanager config (values-eks.yaml).
+#
+# Credentials come from 'alertmanager-smtp-secret' (created by the deploy script
+# in terraform/modules/observability/outputs.tf after terraform apply).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: platform-ses-routing
+  namespace: monitoring
+  labels:
+    # Prometheus Operator discovers AlertmanagerConfig resources by this label
+    alertmanagerConfig: platform
+spec:
+  route:
+    receiver: ses-email
+    groupBy: ["alertname", "severity"]
+    groupWait: 10s
+    groupInterval: 5m
+    repeatInterval: 1h
+    matchers:
+      # Route all platform-level alerts to SES
+      - name: namespace
+        value: microservices
+        matchType: "="
+
+  receivers:
+    - name: ses-email
+      emailConfigs:
+        - to: "yara.ramesh92@gmail.com"
+          from: "yara.ramesh92@gmail.com"
+          smarthost: "email-smtp.us-east-1.amazonaws.com:587"
+          requireTLS: true
+          authUsername:
+            secret:
+              name: alertmanager-smtp-secret
+              key: smtp-username
+          authPassword:
+            secret:
+              name: alertmanager-smtp-secret
+              key: smtp-password
+          headers:
+            - key: Subject
+              value: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} | sev={{ .CommonLabels.severity }}'
+          sendResolved: true

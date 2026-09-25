@@ -1,0 +1,52 @@
+# Grafana Loki — EKS overlay (S3 backend)
+# Usage: helm install loki grafana/loki -f values.yaml -f values-eks.yaml \
+#          --set loki.storage.s3.bucketNames.chunks=<bucket> \
+#          --set loki.storage.s3.bucketNames.ruler=<bucket> \
+#          --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=<irsa-arn>
+#
+# Overrides only what differs from the local kind values.yaml.
+
+loki:
+  storage:
+    # S3 replaces the local filesystem backend.
+    # Bucket name is injected via --set at deploy time.
+    type: s3
+    s3:
+      region: us-east-1
+      # bucketNames.chunks and bucketNames.ruler: injected via --set
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3        # was: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  rulerConfig:
+    storage:
+      type: s3
+
+singleBinary:
+  replicas: 1
+  affinity: {}
+  # WAL PVC only — chunks go to S3
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 2Gi
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 50m
+    limits:
+      memory: 1Gi
+
+# IRSA ServiceAccount — IAM role ARN injected via --set at deploy time
+serviceAccount:
+  create: true
+  name: loki
+  annotations: {}
+  # eks.amazonaws.com/role-arn: injected via --set

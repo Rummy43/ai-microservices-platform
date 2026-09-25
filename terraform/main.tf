@@ -60,3 +60,15 @@ module "msk" {
   private_subnet_ids = module.vpc.private_subnet_ids
   eks_node_sg_id     = module.eks.node_security_group_id
 }
+
+module "observability" {
+  source = "./modules/observability"
+
+  project           = var.project
+  environment       = var.environment
+  aws_region        = var.aws_region
+  account_id        = data.aws_caller_identity.current.account_id
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+  alert_email       = var.alert_email
+}

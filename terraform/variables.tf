@@ -76,3 +76,9 @@ variable "keycloak_admin_password" {
   type        = string
   sensitive   = true
 }
+
+variable "alert_email" {
+  description = "Email address for Alertmanager SES notifications (must be verified in SES sandbox)"
+  type        = string
+  default     = "yara.ramesh92@gmail.com"
+}

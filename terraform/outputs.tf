@@ -52,3 +52,40 @@ output "kubeconfig_command" {
   description = "Run this to configure kubectl for the EKS cluster"
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"
 }
+
+output "tempo_bucket_name" {
+  description = "S3 bucket for Tempo distributed traces"
+  value       = module.observability.tempo_bucket_name
+}
+
+output "loki_bucket_name" {
+  description = "S3 bucket for Loki log chunks"
+  value       = module.observability.loki_bucket_name
+}
+
+output "tempo_irsa_role_arn" {
+  description = "IRSA role ARN — annotate the Tempo K8s ServiceAccount with this value"
+  value       = module.observability.tempo_irsa_role_arn
+}
+
+output "loki_irsa_role_arn" {
+  description = "IRSA role ARN — annotate the Loki K8s ServiceAccount with this value"
+  value       = module.observability.loki_irsa_role_arn
+}
+
+output "ses_smtp_username" {
+  description = "SES SMTP username for Alertmanager (put in K8s alertmanager-smtp-secret)"
+  value       = module.observability.ses_smtp_username
+  sensitive   = true
+}
+
+output "ses_smtp_password" {
+  description = "SES SMTP password for Alertmanager (put in K8s alertmanager-smtp-secret)"
+  value       = module.observability.ses_smtp_password
+  sensitive   = true
+}
+
+output "observability_deploy_instructions" {
+  description = "Step-by-step Helm install commands for Epoch J"
+  value       = module.observability.deploy_instructions
+}
