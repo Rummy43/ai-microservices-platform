@@ -1,0 +1,43 @@
+# Grafana Tempo — distributed tracing backend (single-binary, S3-backed on EKS)
+# wave 0: co-provisioned with the rest of the observability stack
+#
+# EKS-specific values (bucket name + IRSA ARN) are injected as Helm parameters
+# so the values files stay environment-agnostic. These derive deterministically
+# from Terraform (project=ai-platform, environment=prod, account=922024167800).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+  - repoURL: https://grafana.github.io/helm-charts
+    chart: tempo
+    targetRevision: "1.21.0"
+    helm:
+      releaseName: tempo
+      valueFiles:
+      - $values/k8s/helm/tempo/values.yaml
+      - $values/k8s/helm/tempo/values-eks.yaml
+      parameters:
+      - name: tempo.storage.trace.s3.bucket
+        value: ai-platform-prod-tempo-traces
+      - name: serviceAccount.annotations.eks\.amazonaws\.com/role-arn
+        value: arn:aws:iam::922024167800:role/ai-platform-prod-tempo-irsa
+  - repoURL: https://github.com/Rummy43/ai-microservices-platform.git
+    targetRevision: HEAD
+    ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

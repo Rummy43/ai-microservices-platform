@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Cluster-level observability manifests — managed by the observability-config ArgoCD Application.
+# alertmanager-smtp-secret is intentionally excluded: it contains SES credentials and is
+# created once by the Terraform deploy script (terraform/modules/observability/outputs.tf).
+resources:
+- storageclass-gp3.yaml
+- alertmanager-config.yaml

@@ -1,0 +1,33 @@
+# ArgoCD base values — local (kind) install
+# Chart: argo/argo-cd  Repo: https://argoproj.github.io/argo-helm
+# Install: helm install argocd argo/argo-cd -n argocd --create-namespace \
+#            -f values.yaml [-f values-eks.yaml]
+# Check latest chart version: helm search repo argo/argo-cd
+
+global:
+  logging:
+    level: info
+
+server:
+  # Disable TLS on the Argo Server — terminate at ALB/ingress or use port-forward
+  extraArgs:
+  - --insecure
+
+dex:
+  # No SSO provider in this stack — disable Dex to reduce footprint
+  enabled: false
+
+redis-ha:
+  enabled: false
+
+controller:
+  replicas: 1
+
+repoServer:
+  replicas: 1
+
+applicationSet:
+  replicas: 1
+
+notifications:
+  enabled: false

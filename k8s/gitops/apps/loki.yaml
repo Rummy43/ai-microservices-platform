@@ -1,0 +1,46 @@
+# Grafana Loki — log aggregation backend (single-binary, S3-backed on EKS)
+# wave 0: co-provisioned with the rest of the observability stack
+#
+# Bucket name and IRSA ARN are injected as Helm parameters — deterministic from Terraform.
+# The ruler bucket reuses the same S3 bucket (no recording rules → ruler is not active).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+  - repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "6.30.1"
+    helm:
+      releaseName: loki
+      valueFiles:
+      - $values/k8s/helm/loki/values.yaml
+      - $values/k8s/helm/loki/values-eks.yaml
+      parameters:
+      - name: loki.storage.s3.bucketNames.chunks
+        value: ai-platform-prod-loki-chunks
+      - name: loki.storage.s3.bucketNames.ruler
+        value: ai-platform-prod-loki-chunks
+      - name: loki.storage.s3.region
+        value: us-east-1
+      - name: serviceAccount.annotations.eks\.amazonaws\.com/role-arn
+        value: arn:aws:iam::922024167800:role/ai-platform-prod-loki-irsa
+  - repoURL: https://github.com/Rummy43/ai-microservices-platform.git
+    targetRevision: HEAD
+    ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

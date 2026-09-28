@@ -1,0 +1,36 @@
+# Experiment 1 — Pod Kill: user-service resilience
+#
+# Steady-state hypothesis: PENDING outbox rows survive a pod restart.
+#   - All platform alerts INACTIVE before injection
+#   - POST /api/v1/users returns HTTP 201
+#   - outbox_failed gauge = 0
+#
+# Action: kill the user-service pod (K8s restarts it within ~60s on EKS JVM cold start)
+#
+# Expected behaviour:
+#   - K8s detects pod failure, schedules a replacement
+#   - DB-persisted PENDING outbox rows are not lost (they live in MySQL, not in-process)
+#   - Replacement pod picks them up on its next @Scheduled outbox scan
+#   - If restart takes >60s: OutboxBacklogAgeHigh may go pending (5m for:) then resolve
+#   - Circuit breaker at api-gateway may open briefly; auto-recovers
+#
+# Pass criteria: pod reaches Running 1/1, all pending events delivered, alerts auto-resolve
+#
+# Apply:   kubectl apply -f exp-1-pod-kill.yaml
+# Monitor: kubectl get podchaos -n chaos-testing
+# Delete:  kubectl delete -f exp-1-pod-kill.yaml
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: exp-1-user-service-pod-kill
+  namespace: chaos-testing
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      app: user-service
+  gracePeriod: 0
+  # Single kill — no duration needed; experiment completes after the kill is injected

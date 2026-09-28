@@ -1,0 +1,23 @@
+# Chaos Mesh base values
+# Chart: chaos-mesh/chaos-mesh  Repo: https://charts.chaos-mesh.org
+# Install: helm install chaos-mesh chaos-mesh/chaos-mesh -n chaos-testing --create-namespace \
+#            -f values.yaml -f values-eks.yaml
+
+controllerManager:
+  replicaCount: 1
+  # enableFilterNamespace=false: inject chaos into any namespace (not just annotated ones)
+  enableFilterNamespace: false
+
+chaosDaemon:
+  # EKS AL2023 nodes use containerd
+  runtime: containerd
+  socketPath: /run/containerd/containerd.sock
+
+dashboard:
+  enabled: true
+  replicaCount: 1
+  serviceType: ClusterIP
+  # Access: kubectl port-forward -n chaos-testing svc/chaos-dashboard 2333:2333
+
+webhook:
+  timeoutSeconds: 15

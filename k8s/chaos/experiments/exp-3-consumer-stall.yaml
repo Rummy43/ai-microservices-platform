@@ -1,0 +1,41 @@
+# Experiment 3 — Consumer Stall: PipelineConsumptionStalled validation on EKS
+#
+# Steady-state hypothesis: notification-service actively consumes from Kafka.
+#   - All platform alerts INACTIVE before injection
+#   - kafka_consumergroup_lag{consumergroup="notification-group"} = 0 or draining
+#   - PipelineConsumptionStalled INACTIVE
+#
+# Action: pod-failure on ALL notification-service pods for 10 minutes.
+#   pod-failure replaces the container image with an invalid one — K8s enters a
+#   CrashLoopBackOff cycle for the experiment duration, keeping the consumer absent.
+#   This re-validates the ADR-017 blind-spot fix on a live EKS cluster (previously
+#   live-fired locally 2026-07-16 and on kind 2026-08-10).
+#
+# Expected behaviour:
+#   - notification-service consumer group leaves the Kafka consumer group
+#   - kafka-exporter reports broker-side lag accumulating on user-created-topic
+#   - client-side records_lag_max decays to NaN (consumer not fetching — the blind spot)
+#   - PipelineConsumptionStalled fires at exactly the 5m `for:` threshold
+#   - Alertmanager routes to SES email receiver
+#   - After chaos ends: pod restarts, consumer reconnects, lag drains to 0, alert resolves
+#
+# Pass criteria: PipelineConsumptionStalled fires at 5m, SES email delivered, lag drains post-recovery
+#
+# Apply:   kubectl apply -f exp-3-consumer-stall.yaml
+# Monitor: kubectl get podchaos -n chaos-testing
+# Watch:   kubectl get pods -n microservices -w
+# Delete:  kubectl delete -f exp-3-consumer-stall.yaml  (ends the experiment, pods recover)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: exp-3-notification-consumer-stall
+  namespace: chaos-testing
+spec:
+  action: pod-failure
+  mode: all
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      app: notification-service
+  duration: "10m"

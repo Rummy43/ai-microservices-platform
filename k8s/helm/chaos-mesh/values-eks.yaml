@@ -1,0 +1,30 @@
+# Chaos Mesh EKS overlay — resource limits for t3.medium nodes
+
+controllerManager:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+chaosDaemon:
+  # chaosDaemon runs as a privileged DaemonSet — required for pod/network fault injection on EKS
+  privileged: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+dashboard:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

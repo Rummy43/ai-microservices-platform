@@ -1,0 +1,41 @@
+# Experiment 2 — Network Delay: latency SLO breach
+#
+# Steady-state hypothesis: user-service p99 latency stays under the SLO threshold.
+#   - All platform alerts INACTIVE before injection
+#   - HTTP p99 < 500ms (from kube-prometheus-stack ServiceMonitor metrics)
+#   - AvailabilityFastBurn and latency alerts INACTIVE
+#
+# Action: inject 500ms fixed latency on all inbound traffic to user-service pods
+#
+# Expected behaviour:
+#   - Requests to user-service via the gateway now experience ~500ms added latency
+#   - p99 crosses the SLO threshold (SLO = 500ms, injection = +500ms on top of baseline)
+#   - AvailabilityFastBurn (14.4x burn rate window) fires within ~2 minutes
+#   - Alertmanager routes alert to SES email receiver
+#   - After chaos is deleted: latency recovers, alert auto-resolves
+#
+# Pass criteria: correct latency alert fires, SES email delivered, auto-resolves after removal
+#
+# Apply:   kubectl apply -f exp-2-network-delay.yaml
+# Remove:  kubectl delete -f exp-2-network-delay.yaml  (ends the experiment)
+# Monitor: kubectl get networkchaos -n chaos-testing
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: exp-2-user-service-network-delay
+  namespace: chaos-testing
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+    - microservices
+    labelSelectors:
+      app: user-service
+  delay:
+    latency: "500ms"
+    # correlation=100: every packet gets exactly 500ms, no jitter
+    correlation: "100"
+    jitter: "0ms"
+  direction: from
+  duration: "10m"

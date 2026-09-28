@@ -1,0 +1,33 @@
+# Root Application — the bootstrap entry point for the entire platform.
+# ArgoCD watches k8s/gitops/apps/ for all child Application manifests.
+# A git push to that directory automatically creates/updates/prunes child apps.
+#
+# Bootstrap (one-time, after ArgoCD is installed):
+#   kubectl apply -f k8s/gitops/app-of-apps.yaml
+#
+# Sync waves in the child apps enforce ordering:
+#   wave 0 — observability stack (kube-prometheus-stack, tempo, loki, observability-config)
+#   wave 1 — log shipping + chaos tooling (promtail, chaos-mesh)
+#   wave 2 — platform microservices (user-service, notification-service, api-gateway, etc.)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-root
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Rummy43/ai-microservices-platform.git
+    targetRevision: HEAD
+    path: k8s/gitops/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

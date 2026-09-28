@@ -1,0 +1,39 @@
+# Chaos Mesh — fault injection platform for game-day experiments (Phase 11 Epoch L)
+# wave 1: installed after observability so experiment metrics are captured by Prometheus
+#
+# Chaos experiments (k8s/chaos/experiments/) are applied manually via kubectl during
+# game-day sessions — NOT managed by ArgoCD to prevent auto-reapplication of faults.
+#
+# Dashboard access: kubectl port-forward -n chaos-testing svc/chaos-dashboard 2333:2333
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chaos-mesh
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+  - repoURL: https://charts.chaos-mesh.org
+    chart: chaos-mesh
+    targetRevision: "2.6.3"
+    helm:
+      releaseName: chaos-mesh
+      valueFiles:
+      - $values/k8s/helm/chaos-mesh/values.yaml
+      - $values/k8s/helm/chaos-mesh/values-eks.yaml
+  - repoURL: https://github.com/Rummy43/ai-microservices-platform.git
+    targetRevision: HEAD
+    ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chaos-testing
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
