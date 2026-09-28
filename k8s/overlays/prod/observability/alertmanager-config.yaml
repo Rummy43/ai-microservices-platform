@@ -32,14 +32,10 @@ spec:
           from: "yara.ramesh92@gmail.com"
           smarthost: "email-smtp.us-east-1.amazonaws.com:587"
           requireTLS: true
-          authUsername:
-            secret:
-              name: alertmanager-smtp-secret
-              key: smtp-username
+          authUsername: "AKIA5NLHMJF4KDMYJT6J"
           authPassword:
-            secret:
-              name: alertmanager-smtp-secret
-              key: smtp-password
+            name: alertmanager-smtp-secret
+            key: smtp-password
           headers:
             - key: Subject
               value: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} | sev={{ .CommonLabels.severity }}'

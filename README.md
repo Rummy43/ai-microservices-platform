@@ -17,7 +17,7 @@ To design and implement a **production-grade microservices ecosystem** that:
 - Monitors health with real SLIs/SLOs, multi-window burn-rate alerts, and live-fire–verified alert paths
 - Runs in Kubernetes with full in-cluster observability (Prometheus, Grafana, Tempo, Loki, Alertmanager)
 - Enriches events with AI using a local LLM (Ollama + Spring AI) in a non-fatal pipeline
-- Is deployable to AWS EKS via Terraform (Phase 10, roadmap)
+- Is deployed to AWS EKS via Terraform with production observability (S3-backed Tempo/Loki, SES alerting, live-fire verified) — Phase 10 complete
 
 ---
 
@@ -1139,17 +1139,19 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ **End-to-end smoke test PASS** — `POST /api/v1/users` 201 Created through ALB; `UserCreatedEvent` delivered to notification-service via MSK Serverless
 - ✅ Resources decommissioned after evidence capture (`terraform destroy`) — ~$22-28 total cost for full deployment run
 
-#### Epoch J — Production Observability on EKS (coded 2026-09-25, AWS spin-up pending)
-- ✅ **`terraform/modules/observability/`** — S3 buckets for Tempo traces + Loki chunks (AES256, `force_destroy`); IRSA roles scoped per workload (`system:serviceaccount:monitoring:tempo` / `monitoring:loki`); SES email identity + SMTP IAM user with `ses_smtp_password_v4`
+#### Epoch J — Production Observability on EKS ✅ COMPLETE (2026-09-28)
+- ✅ **`terraform/modules/observability/`** — S3 buckets for Tempo traces + Loki chunks (AES256, `force_destroy`); IRSA roles scoped per workload (`system:serviceaccount:monitoring:tempo` / `monitoring:loki`); SES email identity + SMTP IAM user
 - ✅ **Helm EKS overlays** (`-f values.yaml -f values-eks.yaml` pattern):
-  - `k8s/helm/tempo/values-eks.yaml` — S3 trace backend, gp3 WAL PVC, IRSA ServiceAccount annotation placeholder
-  - `k8s/helm/loki/values-eks.yaml` — S3 storage type, gp3 PVC, IRSA ServiceAccount annotation placeholder
-  - `k8s/helm/kube-prometheus-stack/values-eks.yaml` — Alertmanager SMTP file-mount (`smtp_auth_password_file`), SES smarthost `email-smtp.us-east-1.amazonaws.com:587`, critical/warn severity routing, Prometheus 7d retention on 20Gi gp3 PVC
-- ✅ **`k8s/overlays/prod/observability/storageclass-gp3.yaml`** — gp3 EBS StorageClass (3000 IOPS, 125 MiB/s, `WaitForFirstConsumer`, default), replacing EKS's gp2
+  - `k8s/helm/tempo/values-eks.yaml` — S3 trace backend (`ai-platform-prod-tempo-traces`), gp3 WAL PVC, IRSA ServiceAccount
+  - `k8s/helm/loki/values-eks.yaml` — S3 storage type (`ai-platform-prod-loki-chunks`), gp3 PVC, IRSA ServiceAccount
+  - `k8s/helm/kube-prometheus-stack/values-eks.yaml` — Alertmanager SES SMTP (`email-smtp.us-east-1.amazonaws.com:587`), critical/warn severity routing, 7d Prometheus retention on 20Gi gp3 PVC
+- ✅ **`k8s/overlays/prod/observability/storageclass-gp3.yaml`** — gp3 EBS StorageClass (3000 IOPS, `WaitForFirstConsumer`, default)
 - ✅ **`k8s/overlays/prod/observability/alertmanager-config.yaml`** — `AlertmanagerConfig` CR routing `namespace=microservices` alerts to SES email receiver
-- ✅ **`k8s/overlays/prod/observability/alertmanager-smtp-secret.yaml`** — placeholder only; credentials injected at deploy time via `terraform output -raw` (never committed to git)
-- ✅ `terraform validate` PASS on full module graph
-- 🔲 AWS spin-up + exit gate: FAILED outbox row → SES email delivery → auto-resolve
+- ✅ **Exit gate PASSED** (2026-09-28): FAILED outbox row → `outbox_failed=1` → `OutboxPublishTerminalFailure` FIRING → Alertmanager routed to SES → 23 emails dispatched (0 failures) → row deleted → alert auto-resolved
+- ✅ **Tempo S3 confirmed**: 8-span OTel trace for `OutboxPublisherService.publishPendingEvents` retrieved from S3 bucket
+- ✅ **Loki S3 confirmed**: log streams from `container=user-service` and `container=notification-service`
+- ✅ `terraform destroy` — all billable resources decommissioned; manual resources (EBS CSI IRSA role, kafka-client IRSA role, schema-registry ECR repo) also deleted
+- **Hard problems resolved**: Windows Defender blocking 718MB Terraform provider (→ WSL Ubuntu); EKS IMDSv2 hop-count=1 requiring IRSA for all AWS-SDK pods; Prometheus Operator schema rejecting `smtp_auth_*_file` fields; AlertmanagerConfig v1alpha1 authPassword field shape
 
 ### Roadmap
 - 🔲 Phase 11 — Chaos engineering (fault injection, steady-state hypothesis, game-day reports)
@@ -1179,7 +1181,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 7 | SLOs, alerting, multi-window burn rates, Alertmanager, live-fire verification | ✅ Complete |
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
 | 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | ✅ Complete (2026-08-24) |
-| 10 | AWS EKS via Terraform — VPC/EKS/RDS/MSK/ECR + 5 pods on EKS + ALB PASS (Epoch I); S3-backed Tempo/Loki + Alertmanager→SES (Epoch J coded) | ✅ Epoch I complete (2026-09-18); Epoch J coded (2026-09-25) |
+| 10 | AWS EKS via Terraform — VPC/EKS/RDS/MSK/ECR + 5 pods on EKS + ALB PASS (Epoch I); S3-backed Tempo/Loki + Alertmanager→SES + exit gate PASSED (Epoch J) | ✅ **COMPLETE** (2026-09-28) |
 | 11 | Chaos engineering — fault injection, steady-state hypothesis, game-day reports | Planned |
 
 **Standing improvements:**

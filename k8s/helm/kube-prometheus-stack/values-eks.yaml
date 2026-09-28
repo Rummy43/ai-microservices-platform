@@ -78,9 +78,6 @@ alertmanager:
       smtp_smarthost: "email-smtp.us-east-1.amazonaws.com:587"
       smtp_from: "yara.ramesh92@gmail.com"
       smtp_require_tls: true
-      # Credentials read from mounted secret — not hardcoded in git
-      smtp_auth_username_file: /etc/alertmanager/smtp/smtp-username
-      smtp_auth_password_file: /etc/alertmanager/smtp/smtp-password
 
     route:
       group_by: ["alertname", "severity"]
@@ -105,6 +102,8 @@ alertmanager:
       - name: ses-email
         email_configs:
           - to: "yara.ramesh92@gmail.com"
+            auth_username: "${SES_SMTP_USERNAME}"
+            auth_password: "${SES_SMTP_PASSWORD}"
             send_resolved: true
             headers:
               subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} — {{ .CommonLabels.severity }}'
