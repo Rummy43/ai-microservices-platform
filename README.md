@@ -1153,8 +1153,26 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ `terraform destroy` — all billable resources decommissioned; manual resources (EBS CSI IRSA role, kafka-client IRSA role, schema-registry ECR repo) also deleted
 - **Hard problems resolved**: Windows Defender blocking 718MB Terraform provider (→ WSL Ubuntu); EKS IMDSv2 hop-count=1 requiring IRSA for all AWS-SDK pods; Prometheus Operator schema rejecting `smtp_auth_*_file` fields; AlertmanagerConfig v1alpha1 authPassword field shape
 
+### Phase 11 — GitOps (ArgoCD) + Chaos Engineering 🔧 IN PROGRESS
+
+#### Epoch K — ArgoCD GitOps (pre-work ✅ 2026-09-28 — AWS session pending)
+- ✅ **App-of-apps scaffold** (`k8s/gitops/`): root `Application` bootstraps the entire platform from a single `kubectl apply`
+- ✅ **7 child Applications** with sync waves: observability stack (wave 0) → log shipping + chaos tooling (wave 1) → platform microservices (wave 2)
+- ✅ **Multi-source Applications** (ArgoCD 2.6+): Helm chart from upstream repo + values files from Git via `$values` ref; S3/IRSA values injected as deterministic `helm.parameters`
+- ✅ **ArgoCD Helm values** (`k8s/helm/argocd/`): base (insecure mode, Dex off) + EKS resource overlay
+- ✅ **Observability kustomization**: gp3 StorageClass + AlertmanagerConfig now managed as GitOps resources
+
+#### Epoch L — Chaos Engineering (pre-work ✅ 2026-09-28 — AWS session pending)
+- ✅ **Chaos Mesh Helm values** (`k8s/helm/chaos-mesh/`): base (containerd runtime) + EKS overlay (privileged chaosDaemon)
+- ✅ **3 chaos experiments coded** (`k8s/chaos/experiments/`):
+  - `exp-1-pod-kill.yaml` — `PodChaos` kills user-service; validates outbox durability on pod restart
+  - `exp-2-network-delay.yaml` — `NetworkChaos` +500ms latency; validates `AvailabilityFastBurn` alert fires
+  - `exp-3-consumer-stall.yaml` — `PodChaos` pod-failure on notification-service; re-validates `PipelineConsumptionStalled` on EKS (previously live-fired locally 2026-07-16, kind 2026-08-10)
+- ✅ **Steady-state hypothesis doc** (`k8s/chaos/steady-state-hypothesis.md`): pass criteria per experiment
+- ✅ **Game-day report template** (`docs/game-day/2026-phase11-game-day-report.md`): fill during AWS session
+
 ### Roadmap
-- 🔲 Phase 11 — Chaos engineering (fault injection, steady-state hypothesis, game-day reports)
+- 🔲 Phase 12 — Multi-region / DR design
 
 ---
 
