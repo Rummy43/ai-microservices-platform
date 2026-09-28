@@ -1123,7 +1123,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ End-to-end verified in kind: HTTP 201 → Kafka consumed → ai-service → llama3.2 → AI message persisted in `notification_log`
 - ✅ **Exit gate PASS**: 31 OTel spans across 3 services (user-service + notification-service + ai-service) in Grafana Tempo — LLM inference call (23.8s) visible as a child span; Kafka trace context propagated end-to-end via OTel W3C headers
 
-### Phase 10 — AWS EKS via Terraform ✅ EPOCH I COMPLETE (2026-09-18) | EPOCH J CODED (2026-09-25)
+### Phase 10 — AWS EKS via Terraform ✅ CLOSED (2026-09-28)
 
 #### Epoch I — AWS Foundation + EKS Workload Migration
 - ✅ Terraform scaffold: 5 production modules (vpc, eks, rds, msk, ecr) + S3 remote state backend with native locking (`use_lockfile = true`)
