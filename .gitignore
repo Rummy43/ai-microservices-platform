@@ -33,3 +33,6 @@ Thumbs.db
 # --- Microservice Specifics ---
 # If you have local env files with secrets
 .env
+
+# --- Temp working folder (evidence staging, scratch files) ---
+temp/
