@@ -51,6 +51,21 @@ tempo:
 
   retention: 24h
 
+  # Chart default probes hit port 3100 but we override http_listen_port to 3200 above.
+  livenessProbe:
+    httpGet:
+      path: /ready
+      port: 3200
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 3200
+    initialDelaySeconds: 20
+    periodSeconds: 10
+
   resources:
     requests:
       memory: 512Mi
@@ -64,26 +79,6 @@ persistence:
   accessModes:
     - ReadWriteOnce
   size: 5Gi
-
-# Chart default probes hit port 3100 but we override http_listen_port to 3200 above.
-# These overrides align the probe port with the actual listening port.
-livenessProbe:
-  httpGet:
-    path: /ready
-    port: 3200
-  initialDelaySeconds: 30
-  timeoutSeconds: 5
-  periodSeconds: 10
-  failureThreshold: 3
-
-readinessProbe:
-  httpGet:
-    path: /ready
-    port: 3200
-  initialDelaySeconds: 20
-  timeoutSeconds: 5
-  periodSeconds: 10
-  failureThreshold: 3
 
 service:
   type: ClusterIP
