@@ -39,10 +39,10 @@ prometheus:
               storage: 20Gi
     resources:
       requests:
-        memory: 1Gi
+        memory: 512Mi
         cpu: 100m
       limits:
-        memory: 2Gi
+        memory: 1Gi
 
 alertmanager:
   alertmanagerSpec:
