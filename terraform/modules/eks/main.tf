@@ -106,6 +106,41 @@ resource "aws_eks_node_group" "this" {
   ]
 }
 
+# IRSA role for the EBS CSI driver — required because IMDSv2 hop-count=1 on EKS pods
+# blocks node-level IAM; each pod using EBS volumes must have IRSA credentials.
+resource "aws_iam_role" "ebs_csi" {
+  name = "${local.cluster_name}-ebs-csi-irsa"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.this.arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+          "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi_policy" {
+  role       = aws_iam_role.ebs_csi.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+# EKS managed add-on for EBS CSI driver — provisions gp3 PVCs for Prometheus/Grafana/Alertmanager
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name             = aws_eks_cluster.this.name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = aws_iam_role.ebs_csi.arn
+
+  depends_on = [aws_eks_node_group.this]
+}
+
 # Cluster security group (add-on traffic)
 resource "aws_security_group" "cluster" {
   name        = "${local.cluster_name}-cluster-sg"

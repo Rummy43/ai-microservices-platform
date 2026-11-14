@@ -72,3 +72,50 @@ module "observability" {
   oidc_provider_url = module.eks.oidc_provider_url
   alert_email       = var.alert_email
 }
+
+# IRSA role shared by user-service, notification-service, and schema-registry
+# for SASL/IAM authentication to MSK Serverless.
+# Phase 10 tech debt: this role was manually recreated because it was outside TF state.
+# Moving it here makes it deterministic and idempotent across AWS sessions.
+resource "aws_iam_role" "kafka_client" {
+  name = "ai-platform-kafka-client"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = module.eks.oidc_provider_arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(module.eks.oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:microservices:kafka-client-sa"
+          "${replace(module.eks.oidc_provider_url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "kafka_client_msk" {
+  name = "ai-platform-kafka-client-msk"
+  role = aws_iam_role.kafka_client.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "kafka-cluster:Connect",
+        "kafka-cluster:DescribeCluster",
+        "kafka-cluster:AlterCluster",
+        "kafka-cluster:DescribeTopic",
+        "kafka-cluster:CreateTopic",
+        "kafka-cluster:WriteData",
+        "kafka-cluster:ReadData",
+        "kafka-cluster:AlterGroup",
+        "kafka-cluster:DescribeGroup"
+      ]
+      Resource = "*"
+    }]
+  })
+}

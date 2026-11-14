@@ -8,3 +8,5 @@ output "node_security_group_id" {
   # The cluster_security_group_id is auto-created by EKS and attached to all managed nodes.
   value = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
 }
+
+output "ebs_csi_irsa_role_arn" { value = aws_iam_role.ebs_csi.arn }

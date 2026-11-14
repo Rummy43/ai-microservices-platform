@@ -102,8 +102,11 @@ alertmanager:
       - name: ses-email
         email_configs:
           - to: "yara.ramesh92@gmail.com"
-            auth_username: "${SES_SMTP_USERNAME}"
-            auth_password: "${SES_SMTP_PASSWORD}"
+            # auth_username is injected at session time via ArgoCD Application patch
+            # (IAM access key ID changes each terraform run — not stored in git)
+            # auth_password comes from the alertmanager-smtp-secret K8s secret (file mount below)
+            auth_username: "PLACEHOLDER"
+            auth_password_file: /etc/alertmanager/smtp/smtp-password
             send_resolved: true
             headers:
               subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} — {{ .CommonLabels.severity }}'
