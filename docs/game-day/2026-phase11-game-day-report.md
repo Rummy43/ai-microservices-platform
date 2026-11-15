@@ -165,7 +165,7 @@ kafka_consumergroup_lag{consumergroup="notification-group"} → no data
 | L-2 | *(earlier session)* | All `microservices` namespace pods 1/1 Running |
 | L-3 | `ss_5274vrmze` | Prometheus: p99 latency spike to 2.8s during Exp 2 |
 | L-4 | `ss_5234a1ae9` | Prometheus alerts: TargetDown FIRING (2) during Exp 3 |
-| L-5 | *N/A — SMTP credentials broken* | SES email: 535 auth error — fix pending |
+| L-5 | *N/A — SMTP fixed mid-session* | SES email: 535 auth error root-caused + fixed (trailing char truncation in secret) |
 | L-6 | `ss_2207ybq2q` | `up{job="notification-service"}` drops to 0 during Exp 3 |
 | L-7 | *(current scroll view)* | TargetDown FIRING detail: notification-service, 10m+ |
 
@@ -175,7 +175,7 @@ kafka_consumergroup_lag{consumergroup="notification-group"} → no data
 
 | Priority | Action | Owner |
 |---|---|---|
-| P0 | Fix SMTP credentials: run `update-endpoints.ps1` after every `terraform apply` to re-seed `alertmanager-smtp-secret` | Ramesh |
+| P0 | SMTP fix applied mid-session (trailing char truncation in secret — fixed). Add `update-endpoints.ps1` to post-apply runbook to prevent recurrence | Done |
 | P0 | Fix Tempo scrape port: `kube-prometheus-stack` ServiceMonitor needs port 3200 not 3100 | Ramesh |
 | P1 | Deploy Kafka lag exporter for MSK to enable `PipelineConsumptionStalled` and `KafkaConsumerLagHigh` | Phase 12 |
 | P1 | Add traffic generator or lower burn window threshold so `AvailabilityFastBurn` fires with real traffic | Phase 12 |

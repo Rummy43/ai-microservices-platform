@@ -18,6 +18,7 @@ To design and implement a **production-grade microservices ecosystem** that:
 - Runs in Kubernetes with full in-cluster observability (Prometheus, Grafana, Tempo, Loki, Alertmanager)
 - Enriches events with AI using a local LLM (Ollama + Spring AI) in a non-fatal pipeline
 - Is deployed to AWS EKS via Terraform with production observability (S3-backed Tempo/Loki, SES alerting, live-fire verified) — Phase 10 complete
+- GitOps deployment via ArgoCD app-of-apps (7 child Applications, sync waves, multi-source Helm) + Chaos Engineering game-day executed with Chaos Mesh 2.6.3 — Phase 11 complete
 
 ---
 
@@ -1153,23 +1154,26 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ `terraform destroy` — all billable resources decommissioned; manual resources (EBS CSI IRSA role, kafka-client IRSA role, schema-registry ECR repo) also deleted
 - **Hard problems resolved**: Windows Defender blocking 718MB Terraform provider (→ WSL Ubuntu); EKS IMDSv2 hop-count=1 requiring IRSA for all AWS-SDK pods; Prometheus Operator schema rejecting `smtp_auth_*_file` fields; AlertmanagerConfig v1alpha1 authPassword field shape
 
-### Phase 11 — GitOps (ArgoCD) + Chaos Engineering 🔧 IN PROGRESS
+### Phase 11 — GitOps (ArgoCD) + Chaos Engineering ✅ CLOSED (2026-11-14)
 
-#### Epoch K — ArgoCD GitOps (pre-work ✅ 2026-09-28 — AWS session pending)
+#### Epoch K — ArgoCD GitOps ✅ COMPLETE
 - ✅ **App-of-apps scaffold** (`k8s/gitops/`): root `Application` bootstraps the entire platform from a single `kubectl apply`
 - ✅ **7 child Applications** with sync waves: observability stack (wave 0) → log shipping + chaos tooling (wave 1) → platform microservices (wave 2)
 - ✅ **Multi-source Applications** (ArgoCD 2.6+): Helm chart from upstream repo + values files from Git via `$values` ref; S3/IRSA values injected as deterministic `helm.parameters`
 - ✅ **ArgoCD Helm values** (`k8s/helm/argocd/`): base (insecure mode, Dex off) + EKS resource overlay
 - ✅ **Observability kustomization**: gp3 StorageClass + AlertmanagerConfig now managed as GitOps resources
+- ✅ **Live AWS session verified**: all 7 ArgoCD apps Healthy/Synced on EKS; `ServerSideApply=true` on kube-prometheus-stack bypasses 262KB CRD annotation limit (ADR-023)
 
-#### Epoch L — Chaos Engineering (pre-work ✅ 2026-09-28 — AWS session pending)
-- ✅ **Chaos Mesh Helm values** (`k8s/helm/chaos-mesh/`): base (containerd runtime) + EKS overlay (privileged chaosDaemon)
-- ✅ **3 chaos experiments coded** (`k8s/chaos/experiments/`):
-  - `exp-1-pod-kill.yaml` — `PodChaos` kills user-service; validates outbox durability on pod restart
-  - `exp-2-network-delay.yaml` — `NetworkChaos` +500ms latency; validates `AvailabilityFastBurn` alert fires
-  - `exp-3-consumer-stall.yaml` — `PodChaos` pod-failure on notification-service; re-validates `PipelineConsumptionStalled` on EKS (previously live-fired locally 2026-07-16, kind 2026-08-10)
-- ✅ **Steady-state hypothesis doc** (`k8s/chaos/steady-state-hypothesis.md`): pass criteria per experiment
-- ✅ **Game-day report template** (`docs/game-day/2026-phase11-game-day-report.md`): fill during AWS session
+#### Epoch L — Chaos Engineering Game-Day ✅ COMPLETE (2026-11-14)
+- ✅ **Chaos Mesh 2.6.3 deployed via ArgoCD** — controller + daemon Running, `chaos-testing` namespace provisioned
+- ✅ **3 chaos experiments executed** on live EKS (`ai-platform-prod`):
+  - **Exp 1 — Pod Kill (PASS):** `PodChaos` kills user-service; PENDING outbox rows reprocessed after restart with zero event loss; JVM cold-start bottleneck confirmed at 2m46s
+  - **Exp 2 — Network Delay (PARTIAL):** `NetworkChaos` +500ms latency; p99 rose to 2.8s (5.6× SLO) confirmed in Prometheus; `AvailabilityFastBurn` did not fire — blind spot: burn rate requires sustained real HTTP traffic, not just actuator scrapes
+  - **Exp 3 — Consumer Stall (PARTIAL):** `PodChaos` pod-failure on notification-service; `TargetDown` FIRING confirmed at `namespace="microservices"`; `PipelineConsumptionStalled` did not fire — blind spot: no Kafka lag exporter deployed for MSK (metric absent)
+- ✅ **Game-day report** (`docs/game-day/2026-phase11-game-day-report.md`): filled with observations, timestamps, evidence, and three key findings
+- ✅ **SMTP credential gap resolved mid-session**: `alertmanager-smtp-secret` updated with correct 44-char SES SMTP v4 password; `235 Authentication successful` confirmed via direct cluster pod test
+- ✅ **Two engineering findings added** to ADR backlog: (1) SLO burn rate requires real traffic volume; (2) MSK Kafka metrics require kafka-lag-exporter or MSK open monitoring
+- **Hard problems resolved during game-day**: Chaos Mesh `NetworkChaos direction: from` rejected without targets (→ `direction: to`); Chaos Mesh CRDs exceed 262KB annotation limit (→ `ServerSideApply=true`); Tempo probe port mismatch 3100 vs 3200 (→ probe override under `tempo:` key); SMTP trailing character truncation in K8s secret (→ full 44-char v4 password)
 
 ### Roadmap
 - 🔲 Phase 12 — Multi-region / DR design
@@ -1200,7 +1204,7 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 | 8 | Kubernetes, Dockerfiles, Kustomize, in-cluster observability stack | ✅ Complete |
 | 9 | AI service (Spring AI + Ollama + PGVector), AI enrichment pipeline, end-to-end in-cluster | ✅ Complete (2026-08-24) |
 | 10 | AWS EKS via Terraform — VPC/EKS/RDS/MSK/ECR + 5 pods on EKS + ALB PASS (Epoch I); S3-backed Tempo/Loki + Alertmanager→SES + exit gate PASSED (Epoch J) | ✅ **COMPLETE** (2026-09-28) |
-| 11 | Chaos engineering — fault injection, steady-state hypothesis, game-day reports | Planned |
+| 11 | GitOps (ArgoCD app-of-apps, sync waves, multi-source Helm) + Chaos Engineering game-day on EKS (3 experiments, 2 blind spots found, SMTP fix) | ✅ **COMPLETE** (2026-11-14) |
 
 **Standing improvements:**
 - Real notification channel (email via AWS SES / SendGrid) to replace log-simulated delivery
