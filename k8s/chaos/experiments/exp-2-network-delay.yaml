@@ -37,5 +37,5 @@ spec:
     # correlation=100: every packet gets exactly 500ms, no jitter
     correlation: "100"
     jitter: "0ms"
-  direction: from
+  direction: to
   duration: "10m"
