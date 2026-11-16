@@ -1175,6 +1175,20 @@ kubectl exec deploy/user-service -n microservices -- sh -c '
 - ✅ **Two engineering findings added** to ADR backlog: (1) SLO burn rate requires real traffic volume; (2) MSK Kafka metrics require kafka-lag-exporter or MSK open monitoring
 - **Hard problems resolved during game-day**: Chaos Mesh `NetworkChaos direction: from` rejected without targets (→ `direction: to`); Chaos Mesh CRDs exceed 262KB annotation limit (→ `ServerSideApply=true`); Tempo probe port mismatch 3100 vs 3200 (→ probe override under `tempo:` key); SMTP trailing character truncation in K8s secret (→ full 44-char v4 password)
 
+Phase 11 screenshots captured from live EKS run (2026-11-15 re-deploy):
+
+![ArgoCD App List — 7 Healthy](images/linkedin/2026-11-15-argocd-app-tree-public.png)
+*ArgoCD applications list — 7/8 apps Healthy, all Synced from GitHub HEAD*
+
+![ArgoCD Sync Waves](images/linkedin/2026-11-15-argocd-sync-waves-public.png)
+*Platform-root sync result — waves 0 (observability) → 1 (collectors + chaos) → 2 (microservices)*
+
+![Chaos Mesh Experiment Running](images/linkedin/2026-11-15-chaos-mesh-dashboard-public.png)
+*exp-3-notification-consumer-stall: PodChaos pod-failure targeting notification-service, Running*
+
+![TargetDown Alert Firing](images/linkedin/2026-11-15-alert-firing-argocd-chaos-public.png)
+*TargetDown FIRING (3 instances) — notification-service scrape failed 7m after chaos injection*
+
 ### Roadmap
 - 🔲 Phase 12 — Multi-region / DR design
 
