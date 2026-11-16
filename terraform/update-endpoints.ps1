@@ -29,7 +29,7 @@ Write-Host "MSK brokers:    $MSK_BROKERS"
 # We replace the entire hostname pattern to avoid partial matches
 $OLD_MYSQL_HOST    = "ai-platform-prod-mysql.cifqagsacu3i.us-east-1.rds.amazonaws.com"
 $OLD_POSTGRES_HOST = "ai-platform-prod-postgres.cifqagsacu3i.us-east-1.rds.amazonaws.com"
-$OLD_MSK_BROKERS   = "boot-yxnxm9q2.c1.kafka-serverless.us-east-1.amazonaws.com:9098"
+$OLD_MSK_BROKERS   = "boot-hhi6hm5z.c1.kafka-serverless.us-east-1.amazonaws.com:9098"
 
 $yamlRoot = "..\k8s\overlays\prod"
 $files = @(
