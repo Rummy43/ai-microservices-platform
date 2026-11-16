@@ -9,7 +9,7 @@ data:
       datasource:
         url: jdbc:postgresql://ai-platform-prod-postgres.cifqagsacu3i.us-east-1.rds.amazonaws.com:5432/notificationdb
       kafka:
-        bootstrap-servers: boot-hhi6hm5z.c1.kafka-serverless.us-east-1.amazonaws.com:9098
+        bootstrap-servers: boot-nbz80cvt.c1.kafka-serverless.us-east-1.amazonaws.com:9098
         properties:
           security.protocol: SASL_SSL
           sasl.mechanism: AWS_MSK_IAM
