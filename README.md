@@ -1241,6 +1241,18 @@ Trace IDs are intentionally **not** Loki stream labels (unbounded cardinality); 
 
 These queries enable cross-service distributed request tracing through Kafka workflows using centralized log aggregation — and each matching line links directly to its Tempo trace via the **View Trace** derived field.
 
+## 📝 Technical Writing
+
+Articles and blog posts published about this platform:
+
+| Title | Published |
+|-------|-----------|
+| [I Deleted kubectl apply From My Workflow. Here's What Replaced It.](https://medium.com/@yara.ramesh/i-deleted-kubectl-apply-from-my-workflow-heres-what-replaced-it-b5e3090e84ec) | Medium + Dev.to — Nov 2026 |
+
+> 10+ technical articles published across Medium, Dev.to, and DZone — covering event-driven architecture, distributed tracing, Kubernetes observability, GitOps patterns, and chaos engineering from this platform. See [Dev.to profile](https://dev.to/ramesh-yara).
+
+---
+
 ## 🤝 Contributing
 
 This project demonstrates modern distributed systems architecture and operational engineering patterns using event-driven microservices.
